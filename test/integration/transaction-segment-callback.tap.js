@@ -1,12 +1,11 @@
 'use strict';
 
 var path    = require('path')
-  , util    = require('util')
   , tap     = require('tap')
   , test    = tap.test
   , helper  = require(path.join(__dirname, '..', 'lib', 'agent_helper'))
-  , Context = require(path.join(__dirname, '..', '..', 'lib', 'context'))
-  , Tracer  = require(path.join(__dirname, '..', '..', 'lib', 'transaction', 'tracer', 'debug'))
+  , Tracer  = require(path.join(__dirname, '..', '..', 'lib',
+                                'transaction', 'tracer', 'debug'))
   ;
 
 
@@ -18,24 +17,24 @@ var path    = require('path')
 
 // set up shared context
 var agent = helper.loadMockedAgent();
-var context = new Context(true); // want to ensure that enter/exit are paired
 
-// a. synchronous handler
-//
-// -> TRANSACTION T1
-//   -> SEGMENT T1S1
-//     -> CALL T1S1C1: 1. execution enters handler
-//     <- CALL T1S1C1: 2. execution exits handler
-//   <- SEGMENT T1S1
-// <- TRANSACTION T1
+/* a. synchronous handler
+ *
+ * -> TRANSACTION T1
+ *   -> SEGMENT T1S1
+ *     -> CALL T1S1C1: 1. execution enters handler
+ *     <- CALL T1S1C1: 2. execution exits handler
+ *   <- SEGMENT T1S1
+ * <- TRANSACTION T1
+ */
 test("a. synchronous handler", function (t) {
   t.plan(8);
 
-  var tracer = new Tracer(agent, context);
+  var tracer = new Tracer(agent);
 
   var transaction;
   var handler = function (multiplier, multiplicand) {
-    transaction = context.state.getTransaction();
+    transaction = tracer.getState().getTransaction();
     t.ok(transaction, "should find transaction in handler");
 
     return multiplier * multiplicand;
@@ -55,7 +54,7 @@ test("a. synchronous handler", function (t) {
 
   var wrappings = [
     '->T outer', '<-T outer', // handler proxying
-    '->T inner', '<-T inner', // handler invocation
+    '->T inner', '<-T inner' // handler invocation
   ];
   t.deepEquals(describer.wrappings, wrappings, "wrapping sequence should match.");
 
@@ -70,31 +69,31 @@ test("a. synchronous handler", function (t) {
     '->T inner',
       '+T', '+S', '+C',
       '->T1S1C1', '<-T1S1C1',
-    '<-T inner',
+    '<-T inner'
   ];
   t.deepEquals(describer.verbose, full, "full trace should match.");
 });
 
-
-// b. asynchronous handler
-//
-// -> TRANSACTION T1
-//   -> SEGMENT T1S1
-//     -> CALL T1S1C1: 1. execution enters handler
-//     <- CALL T1S1C1: 2. execution exits handler
-// ---
-//     -> CALL T1S1C2: 3. execution enters callback
-//     <- CALL T1S1C2: 4. execution exits callback
-//   <- SEGMENT T1S1
-// <- TRANSACTION T1
+/* b. asynchronous handler
+ *
+ * -> TRANSACTION T1
+ *   -> SEGMENT T1S1
+ *     -> CALL T1S1C1: 1. execution enters handler
+ *     <- CALL T1S1C1: 2. execution exits handler
+ * ---
+ *     -> CALL T1S1C2: 3. execution enters callback
+ *     <- CALL T1S1C2: 4. execution exits callback
+ *   <- SEGMENT T1S1
+ * <- TRANSACTION T1
+ */
 test("b. asynchronous handler", function (t) {
   t.plan(5);
 
-  var tracer = new Tracer(agent, context);
+  var tracer = new Tracer(agent);
 
   var transaction;
   var handler = function (multiplier) {
-    transaction = context.state.getTransaction();
+    transaction = tracer.getState().getTransaction();
 
     var callback = function (multiplicand) {
       return multiplier * multiplicand;
@@ -149,35 +148,36 @@ test("b. asynchronous handler", function (t) {
   t.deepEquals(describer.verbose, full, "full trace should match.");
 });
 
-// c. two overlapping executions of an asynchronous handler
-//
-// -> TRANSACTION T1
-//   -> SEGMENT T1S1
-//     -> CALL T1S1C1: 1. execution enters handler (1st time)
-//     <- CALL T1S1C1: 2. execution exits handler (1st time)
-// ---
-// -> TRANSACTION T2
-//   -> SEGMENT T2S1
-//     -> CALL T2S1C1: 3. execution enters handler (2nd time)
-//     <- CALL T2S1C1: 4. execution exits handler (2nd time)
-// ---
-//     -> CALL T1S1C2: 5. execution enters 1st callback
-//     <- CALL T1S1C2: 6. execution exits 1st callback
-//   <- SEGMENT T1S1
-// <- TRANSACTION T1
-// ---
-//     -> CALL T2S1C2: 7. execution enters 2nd callback
-//     <- CALL T2S1C2: 8. execution exits 2nd callback
-//   <- SEGMENT T2S1
-// <- TRANSACTION T2
+/* c. two overlapping executions of an asynchronous handler
+ *
+ * -> TRANSACTION T1
+ *   -> SEGMENT T1S1
+ *     -> CALL T1S1C1: 1. execution enters handler (1st time)
+ *     <- CALL T1S1C1: 2. execution exits handler (1st time)
+ * ---
+ * -> TRANSACTION T2
+ *   -> SEGMENT T2S1
+ *     -> CALL T2S1C1: 3. execution enters handler (2nd time)
+ *     <- CALL T2S1C1: 4. execution exits handler (2nd time)
+ * ---
+ *     -> CALL T1S1C2: 5. execution enters 1st callback
+ *     <- CALL T1S1C2: 6. execution exits 1st callback
+ *   <- SEGMENT T1S1
+ * <- TRANSACTION T1
+ * ---
+ *     -> CALL T2S1C2: 7. execution enters 2nd callback
+ *     <- CALL T2S1C2: 8. execution exits 2nd callback
+ *   <- SEGMENT T2S1
+ * <- TRANSACTION T2
+ */
 test("c. two overlapping executions of an asynchronous handler", function (t) {
   t.plan(11);
 
-  var tracer = new Tracer(agent, context);
+  var tracer = new Tracer(agent);
 
   var transactions = [];
   var handler = function (multiplier) {
-    transactions.push(context.state.getTransaction());
+    transactions.push(tracer.getState().getTransaction());
 
     var callback = function (multiplicand) {
       return multiplier * multiplicand;
@@ -200,7 +200,7 @@ test("c. two overlapping executions of an asynchronous handler", function (t) {
     var describer = transaction.state.describer;
     var creations = [
       '+T', '+S', '+C', // handler invocation
-      '+C',             // callback proxying
+      '+C'             // callback proxying
     ];
     t.deepEquals(describer.creations, creations, "creation sequence should match.");
 
@@ -218,7 +218,7 @@ test("c. two overlapping executions of an asynchronous handler", function (t) {
       '->T'+i+'S1C1',
       '<-T'+i+'S1C1',
       '->T'+i+'S1C2',
-      '<-T'+i+'S1C2',
+      '<-T'+i+'S1C2'
     ];
     t.deepEquals(describer.trace, calls, "call entry / exit sequence should match");
 
@@ -234,28 +234,29 @@ test("c. two overlapping executions of an asynchronous handler", function (t) {
       '<-T inner',
       '->C inner',
         '->T'+i+'S1C2', '<-T'+i+'S1C2',
-      '<-C inner',
+      '<-C inner'
     ];
     t.deepEquals(describer.verbose, full, "full trace should match.");
   });
 });
 
-// d. synchronous handler with synchronous subsidiary handler
-//
-// -> TRANSACTION T1
-//   -> SEGMENT T1S1
-//     -> CALL T1S1C1: 1. execution enters handler
-//   -> SEGMENT T1S2
-//     -> CALL T1S2C1: 2. execution enters subsidiary handler
-//     <- CALL T1S2C1: 3. execution exits subsidiary handler
-//   <- SEGMENT T1S2
-//     <- CALL T1S1C1: 4. execution exits handler
-//   <- SEGMENT T1S1
-// <- TRANSACTION T1
+/* d. synchronous handler with synchronous subsidiary handler
+ *
+ * -> TRANSACTION T1
+ *   -> SEGMENT T1S1
+ *     -> CALL T1S1C1: 1. execution enters handler
+ *   -> SEGMENT T1S2
+ *     -> CALL T1S2C1: 2. execution enters subsidiary handler
+ *     <- CALL T1S2C1: 3. execution exits subsidiary handler
+ *   <- SEGMENT T1S2
+ *     <- CALL T1S1C1: 4. execution exits handler
+ *   <- SEGMENT T1S1
+ * <- TRANSACTION T1
+ */
 test("d. synchronous handler with synchronous subsidiary handler", function (t) {
   t.plan(5);
 
-  var tracer = new Tracer(agent, context);
+  var tracer = new Tracer(agent);
 
   var subsidiary = function (value, addend) {
     return value + addend;
@@ -264,7 +265,7 @@ test("d. synchronous handler with synchronous subsidiary handler", function (t) 
 
   var transaction;
   var handler = function (multiplier, multiplicand) {
-    transaction = context.state.getTransaction();
+    transaction = tracer.getState().getTransaction();
     var product = multiplier * multiplicand;
 
     return wrappedSubsidiary(product, 7);
@@ -314,30 +315,31 @@ test("d. synchronous handler with synchronous subsidiary handler", function (t) 
   t.deepEquals(describer.verbose, full, "full trace should match.");
 });
 
-// e. asynchronous handler with an asynchronous subsidiary handler
-//
-// -> TRANSACTION T1
-//   -> SEGMENT T1S1
-//     -> T1S1C1: 1. execution enters handler
-//   -> SEGMENT T1S2
-//     -> T1S2C1: 2. execution enters subsidiary handler
-//     <- T1S2C1: 3. execution exits subsidiary handler
-//   -> SEGMENT T1S1
-//     <- T1S1C1: 4. execution exits handler
-// ---
-//   -> SEGMENT T1S2
-//     -> T1S2C2: 5. execution enters subsidiary callback
-//   -> SEGMENT T1S1
-//     -> T1S1C2: 6. execution enters handler callback
-//     <- T1S1C2: 7. execution exits handler callback
-//   <- SEGMENT T1S1
-//     <- T1S2C2: 8. execution exits subsidiary callback
-//   <- SEGMENT T1S2
-// <- TRANSACTION T1
+/* e. asynchronous handler with an asynchronous subsidiary handler
+ *
+ * -> TRANSACTION T1
+ *   -> SEGMENT T1S1
+ *     -> T1S1C1: 1. execution enters handler
+ *   -> SEGMENT T1S2
+ *     -> T1S2C1: 2. execution enters subsidiary handler
+ *     <- T1S2C1: 3. execution exits subsidiary handler
+ *   -> SEGMENT T1S1
+ *     <- T1S1C1: 4. execution exits handler
+ * ---
+ *   -> SEGMENT T1S2
+ *     -> T1S2C2: 5. execution enters subsidiary callback
+ *   -> SEGMENT T1S1
+ *     -> T1S1C2: 6. execution enters handler callback
+ *     <- T1S1C2: 7. execution exits handler callback
+ *   <- SEGMENT T1S1
+ *     <- T1S2C2: 8. execution exits subsidiary callback
+ *   <- SEGMENT T1S2
+ * <- TRANSACTION T1
+ */
 test("e. asynchronous handler with an asynchronous subsidiary handler", function (t) {
   t.plan(5);
 
-  var tracer = new Tracer(agent, context);
+  var tracer = new Tracer(agent);
 
   var subsidiary = function (value, next) {
     var inner = function (addend, divisor) {
@@ -350,7 +352,7 @@ test("e. asynchronous handler with an asynchronous subsidiary handler", function
 
   var transaction;
   var handler = function (multiplier, multiplicand, callback) {
-    transaction = context.state.getTransaction();
+    transaction = tracer.getState().getTransaction();
     var next = function (value, divisor) {
       return value / divisor;
     };
@@ -430,43 +432,45 @@ test("e. asynchronous handler with an asynchronous subsidiary handler", function
   t.deepEquals(describer.verbose, full, "full trace should match.");
 });
 
-// f. two overlapping executions of an asynchronous handler with an asynchronous subsidiary handler
-//
-// -> TRANSACTION T1
-//   -> SEGMENT T1S1
-//     -> CALL T1S1C1: 1. execution enters handler (1st time)
-//   -> SEGMENT T1S2
-//     -> CALL T1S2C1: 2. execution enters subsidiary handler (1st time)
-//     <- CALL T1S2C1: 3. execution exits subsidiary handler (1st time)
-//     <- CALL T1S1C1: 4. execution exits handler (1st time)
-// ---
-// -> TRANSACTION T2
-//   -> SEGMENT T2S1
-//     -> CALL T2S1C1: 5. execution enters handler (2nd time)
-//   -> SEGMENT T2S2
-//     -> CALL T2S2C1: 6. execution enters subsidiary handler (2nd time)
-//     <- CALL T2S2C1: 7. execution exits subsidiary handler (2nd time)
-//     <- CALL T1S1C1: 8. execution exits handler (2nd time)
-// ---
-//     -> CALL T1S2C2: 9. execution enters 1st subsidiary callback
-//   <- SEGMENT T1S2
-//     -> CALL T1S1C2: 10. execution enters 1st handler callback
-//     <- CALL T1S1C2: 11. execution exits 1st handler callback
-//   <- SEGMENT T1S1
-//     <- CALL T1S2C2: 12. execution exits 1st subsidiary callback
-// <- TRANSACTION T1
-// ---
-//     -> CALL T2S2C2: 13. execution enters 2nd subsidiary callback
-//   <- SEGMENT T2S2
-//     -> CALL T2S1C2: 14. execution enters 2nd handler callback
-//     <- CALL T2S1C2: 15. execution exits 2nd handler callback
-//   <- SEGMENT T2S1
-//     <- CALL T2S2C2: 16. execution exits 2nd subsidiary callback
-// <- TRANSACTION T2
-test("f. two overlapping executions of an asynchronous handler with an asynchronous subsidiary handler", function (t) {
+/* f. two overlapping executions of an async handler with an async subsidiary handler
+ *
+ * -> TRANSACTION T1
+ *   -> SEGMENT T1S1
+ *     -> CALL T1S1C1: 1. execution enters handler (1st time)
+ *   -> SEGMENT T1S2
+ *     -> CALL T1S2C1: 2. execution enters subsidiary handler (1st time)
+ *     <- CALL T1S2C1: 3. execution exits subsidiary handler (1st time)
+ *     <- CALL T1S1C1: 4. execution exits handler (1st time)
+ * ---
+ * -> TRANSACTION T2
+ *   -> SEGMENT T2S1
+ *     -> CALL T2S1C1: 5. execution enters handler (2nd time)
+ *   -> SEGMENT T2S2
+ *     -> CALL T2S2C1: 6. execution enters subsidiary handler (2nd time)
+ *     <- CALL T2S2C1: 7. execution exits subsidiary handler (2nd time)
+ *     <- CALL T1S1C1: 8. execution exits handler (2nd time)
+ * ---
+ *     -> CALL T1S2C2: 9. execution enters 1st subsidiary callback
+ *   <- SEGMENT T1S2
+ *     -> CALL T1S1C2: 10. execution enters 1st handler callback
+ *     <- CALL T1S1C2: 11. execution exits 1st handler callback
+ *   <- SEGMENT T1S1
+ *     <- CALL T1S2C2: 12. execution exits 1st subsidiary callback
+ * <- TRANSACTION T1
+ * ---
+ *     -> CALL T2S2C2: 13. execution enters 2nd subsidiary callback
+ *   <- SEGMENT T2S2
+ *     -> CALL T2S1C2: 14. execution enters 2nd handler callback
+ *     <- CALL T2S1C2: 15. execution exits 2nd handler callback
+ *   <- SEGMENT T2S1
+ *     <- CALL T2S2C2: 16. execution exits 2nd subsidiary callback
+ * <- TRANSACTION T2
+ */
+test("f. two overlapping executions of an async handler with an async subsidiary handler",
+     function (t) {
   t.plan(11);
 
-  var tracer = new Tracer(agent, context);
+  var tracer = new Tracer(agent);
 
   var subsidiary = function (value, next) {
     var inner = function (addend, divisor) {
@@ -479,7 +483,7 @@ test("f. two overlapping executions of an asynchronous handler with an asynchron
 
   var transactions = [];
   var handler = function (multiplier, multiplicand, callback) {
-    transactions.push(context.state.getTransaction());
+    transactions.push(tracer.getState().getTransaction());
 
     var next = function (value, divisor) {
       return value / divisor;
@@ -505,7 +509,7 @@ test("f. two overlapping executions of an asynchronous handler with an asynchron
       '+T', '+S', '+C', // 1st handler invocation
       '+C',             // 1st callback invocation
       '+S', '+C',       // 1st subsidiary handler invocation
-      '+C',             // 1st subsidiary callback invocation
+      '+C'             // 1st subsidiary callback invocation
     ];
     t.deepEquals(describer.creations, creations, "creation sequence should match.");
 
@@ -520,7 +524,7 @@ test("f. two overlapping executions of an asynchronous handler with an asynchron
       '<-T inner',
       '->C inner',              // subsidiary callback invocation
       '->C inner', '<-C inner', // handler callback invocation
-      '<-C inner',
+      '<-C inner'
     ];
     t.deepEquals(describer.wrappings, wrappings, "wrapping sequence should match.");
 
@@ -533,7 +537,7 @@ test("f. two overlapping executions of an asynchronous handler with an asynchron
       '->T'+i+'S2C2',
       '->T'+i+'S1C2',
       '<-T'+i+'S1C2',
-      '<-T'+i+'S2C2',
+      '<-T'+i+'S2C2'
     ];
     t.deepEquals(describer.trace, calls, "call entry / exit sequence should match");
 
@@ -562,7 +566,7 @@ test("f. two overlapping executions of an asynchronous handler with an asynchron
             '->T'+i+'S1C2', '<-T'+i+'S1C2',
           '<-C inner',
         '<-T'+i+'S2C2',
-      '<-C inner',
+      '<-C inner'
     ];
     t.deepEquals(describer.verbose, full, "full trace should match.");
   });

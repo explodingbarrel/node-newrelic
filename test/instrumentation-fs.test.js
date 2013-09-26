@@ -62,13 +62,13 @@ describe("built-in fs module instrumentation", function () {
         if (error) return done(error); // habits die hard
 
         var transaction = agent.getTransaction();
+        should.exist(transaction, "should find transaction inside readdir");
+
         agent.once('transactionFinished', function () {
           var metric = agent.metrics.getMetric('Filesystem/ReadDir/stub');
           should.exist(metric);
 
-          var stats = metric.stats;
-          should.exist(stats);
-          expect(stats.callCount).equal(1);
+          expect(metric.callCount).equal(1);
 
           return done();
         });
@@ -107,9 +107,13 @@ describe("built-in fs module instrumentation", function () {
       expect(mochaHandlers.length).above(0);
     });
 
-    it("should trace errors thrown by the instrumentation in the error tracer",
-       function (done) {
+    it("should trace errors thrown from the callback", function (done) {
+      // FIXME: 0.8 uses uncaughtException for domains, 0.6 has no domains. How to trap?
+      var handled = false;
       process.once('uncaughtException', function () {
+        if (handled) return;
+        handled = true;
+
         var errors = agent.errors.errors; // not my finest naming scheme
         expect(errors.length).equal(1);
 
@@ -124,7 +128,12 @@ describe("built-in fs module instrumentation", function () {
     });
 
     it("should propagate traced exceptions", function (done) {
+      // FIXME: 0.8 uses uncaughtException for domains, 0.6 has no domains. How to trap?
+      var handled = false;
       process.once('uncaughtException', function (error) {
+        if (handled) return;
+        handled = true;
+
         expect(error.message).equal("ohno");
 
         return done();

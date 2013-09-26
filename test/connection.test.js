@@ -5,14 +5,18 @@ var path                = require('path')
   , expect              = chai.expect
   , should              = chai.should()
   , sinon               = require('sinon')
-  , logger              = require(path.join(__dirname, '..', 'lib', 'logger')).child({component : 'TEST'})
+  , logger              = require(path.join(__dirname, '..', 'lib',
+                                            'logger')).child({component : 'TEST'})
   , config              = require(path.join(__dirname, '..', 'lib', 'config'))
   , Agent               = require(path.join(__dirname, '..', 'lib', 'agent'))
-  , CollectorConnection = require(path.join(__dirname, '..', 'lib', 'collector', 'connection'))
-  , DataSender          = require(path.join(__dirname, '..', 'lib', 'collector', 'data-sender'))
+  , CollectorConnection = require(path.join(__dirname, '..', 'lib',
+                                            'collector', 'connection'))
+  , DataSender          = require(path.join(__dirname, '..', 'lib',
+                                            'collector', 'data-sender'))
   , ErrorTracer         = require(path.join(__dirname, '..', 'lib', 'error'))
   , Metrics             = require(path.join(__dirname, '..', 'lib', 'metrics'))
-  , SQLTrace            = require(path.join(__dirname, '..', 'lib', 'transaction', 'trace', 'sql'))
+  , SQLTrace            = require(path.join(__dirname, '..', 'lib',
+                                            'transaction', 'trace', 'sql'))
   , Stats               = require(path.join(__dirname, '..', 'lib', 'stats'))
   , Transaction         = require(path.join(__dirname, '..', 'lib', 'transaction'))
   ;
@@ -23,7 +27,7 @@ function generateSubmissionURL(protocolVersion, key, method, runId) {
     '&protocol_version=' + protocolVersion +
     '&license_key=' + key +
     '&method=' + method +
-    '&agent_run_id=' + runId;
+    '&run_id=' + runId;
 }
 
 describe("CollectorConnection", function () {
@@ -34,12 +38,15 @@ describe("CollectorConnection", function () {
 
   // CONSTANTS
   var SAMPLE_RUN_ID = 101010101
-    , PROTOCOL_VERSION = 9
+    , PROTOCOL_VERSION = 11
     ;
+
+  it("starts out disconnected", function () {
+    expect(new CollectorConnection(new Agent()).isConnected()).equal(false);
+  });
 
   describe("with a mocked DataSender", function () {
     var connection
-      , mockConnection
       , method
       , uri
       , params
@@ -52,146 +59,241 @@ describe("CollectorConnection", function () {
           'app_name'    : 'node.js Tests',
           'license_key' : testLicense,
           'host'        : collectorHost,
-          'port'        : 80
+          'port'        : 80,
+          // run_id is set as a side effect of the connect() method.
+          'run_id'      : SAMPLE_RUN_ID
         }
       });
       connection = new CollectorConnection(agent);
-      // agentRunId is set as a side effect of the connect() method.
-      connection.agentRunId = SAMPLE_RUN_ID;
-      mockConnection = sinon.mock(connection);
 
-      // replace CollectorConnection.createDataSender
-      var sender = new DataSender(agent.config, SAMPLE_RUN_ID);
-      sender.invokeMethod = function (sMethod, sParams) {
+      // DataSender is created entirely within send(), so mock indirectly
+      sinon.stub(DataSender.prototype, 'invokeMethod', function (sMethod, sData) {
         method = sMethod;
-        uri    = sender.getURL(method);
-        params = sParams;
-      };
+        uri    = this.getURL(method);
+        params = sData;
+      });
+    });
 
-      // replace CollectorConnection.createDataSender
-      mockConnection.expects('createDataSender').once().returns(sender);
+    afterEach(function () {
+      DataSender.prototype.invokeMethod.restore();
     });
 
     // https://hudson.newrelic.com/job/collector-master/javadoc/com/nr/collector/methods/MetricDataMethod.html
-    it("should send metric data in the expected format", function () {
-      // let's try a ludicrously high Apdex T
-      var metrics = new Metrics(1);
-      metrics.measureDurationUnscoped('Test/SampleMetric/all', 3, 1);
+    describe("sending metric data", function () {
+      var metrics;
 
-      connection.sendMetricData(12, 1014, metrics.toJSON());
-      mockConnection.verify();
+      beforeEach(function () {
+        // let's try a ludicrously high Apdex T
+        metrics = new Metrics(1, agent.mapper, agent.metricNameNormalizer);
+        metrics.started = 12000;
+        metrics.measureMilliseconds('Test/SampleMetric/all', null, 3, 1);
 
-      expect(method).equal('metric_data');
-      expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
-                                              'metric_data', SAMPLE_RUN_ID));
-      var runId      = params[0]
-        , startTime  = params[1]
-        , endTime    = params[2]
-        , metricData = params[3]
-        ;
-      expect(runId).equal(SAMPLE_RUN_ID);
-      expect(startTime).equal(12);
-      expect(endTime).equal(1014);
-      expect(metricData).deep.equal(metrics.toJSON());
+        connection.sendMetricData(metrics);
+      });
+
+      it("blows up if invoked without metrics", function () {
+        expect(function () { connection.sendMetricData(null); }).throws();
+      });
+
+      it("invokes metric_data", function () {
+        expect(method).equal('metric_data');
+      });
+
+      it("generates the correct URL", function () {
+        expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
+                                                'metric_data', SAMPLE_RUN_ID));
+      });
+
+      it("puts the run ID in the right place", function () {
+        var runId = params[0] ;
+        expect(runId).equal(SAMPLE_RUN_ID);
+      });
+
+      it("puts the harvest cycle start time in the right place", function () {
+        var startTime = params[1];
+        expect(startTime).equal(12);
+      });
+
+      it("puts the harvest cycle end time in the right place", function () {
+        var endTime = params[2];
+        expect(endTime).not.above(Date.now() / 1000);
+      });
+
+      it("passes along the metrics unmolested", function () {
+        var metricData = params[3];
+        expect(metricData).deep.equal(metrics);
+      });
     });
 
     // https://hudson.newrelic.com/job/collector-master/javadoc/com/nr/collector/methods/ErrorData.html
-    it("should send traced errors in the expected format", function () {
-      var errors = new ErrorTracer(agent.config);
+    describe("sending error traces", function () {
+      var data;
 
-      var transaction = new Transaction(agent);
-      transaction.measureWeb('/test-request/churro', 400, 5, 5);
+      beforeEach(function () {
+        var errors = new ErrorTracer(agent.config);
 
-      errors.onTransactionFinished(transaction);
-      connection.sendTracedErrors(errors.errors);
-      mockConnection.verify();
+        var transaction = new Transaction(agent);
+        transaction.url = '/test-request/churro';
+        transaction.name = 'WebTransaction/StatusCode/400';
+        transaction.statusCode = 400;
+        transaction.end();
 
-      expect(method).equal('error_data');
-      expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
-                                              'error_data', SAMPLE_RUN_ID));
-      var runId     = params[0]
-        , errorData = params[1]
-        ;
-      expect(runId).equal(SAMPLE_RUN_ID);
-      // 0: ignored
-      // 1: scope
-      // 2: message
-      // 3: message class
-      // 4: params
-      expect(errorData).deep.equal([
-                                     [
-                                       0,
-                                       'WebTransaction/StatusCode/400',
-                                       'HttpError 400',
-                                       'HttpError 400',
-                                       {request_uri : '/test-request/churro'}
-                                     ]
-                                   ]);
+        errors.onTransactionFinished(transaction);
+        data = errors.errors;
+        connection.sendTracedErrors(errors.errors);
+      });
+
+      it("blows up if invoked without errors", function () {
+        expect(function () { connection.sendTracedErrors(null); }).throws();
+      });
+
+      it("invokes error_data", function () {
+        expect(method).equal('error_data');
+      });
+
+      it("generates the correct URL", function () {
+        expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
+                                                'error_data', SAMPLE_RUN_ID));
+      });
+
+      it("puts the run ID in the correct place", function () {
+        var runId = params[0];
+        expect(runId).equal(SAMPLE_RUN_ID);
+      });
+
+      it("shouldn't mess with the error trace(s)", function () {
+        var errorData = params[1];
+        // 0: ignored
+        // 1: name
+        // 2: message
+        // 3: error type
+        // 4: params
+        expect(errorData).deep.equal(
+          [
+            [
+              0,
+              'WebTransaction/StatusCode/400',
+              'HttpError 400',
+              'Error',
+              {request_uri : '/test-request/churro'}
+            ]
+          ]
+        );
+      });
     });
 
-    // https://hudson.newrelic.com/job/collector-master/javadoc/com/nr/collector/methods/TransactionSampleData.html
-    it("should send transaction traces in the expected format", function () {
-      var transaction = new Transaction(agent);
-      var parent = transaction.getTrace().add('Express/Uri/test-get');
-      var child = parent.add('MongoDB/insert/user');
-      child.end();
-      parent.end();
-      transaction.getTrace().end();
+    // https://pdx-hudson.datanerd.us/job/collector-master/javadoc/com/nr/collector/methods/TransactionSampleData.html
+    describe("sending transaction traces", function () {
+      var traces;
 
-      var traces = [transaction.getTrace()];
+      beforeEach(function () {
+        var transaction = new Transaction(agent)
+          , parent      = transaction.getTrace().add('Express/Uri/test-get')
+          , child       = parent.add('MongoDB/insert/user')
+          ;
 
-      connection.sendTransactionTraces(traces);
-      mockConnection.verify();
+        child.end();
+        parent.end();
+        transaction.getTrace().end();
+        transaction.end();
 
-      expect(method).equal('transaction_sample_data');
-      expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
-                                              'transaction_sample_data', SAMPLE_RUN_ID));
-      var traceData = params[1];
-      expect(traceData).deep.equal(traces);
+        traces = [transaction.getTrace()];
+
+        connection.sendTransactionTraces(traces);
+      });
+
+      it("blows up if invoked without a trace", function () {
+        expect(function () { connection.sendTransactionTraces(null); }).throws();
+      });
+
+      it("invokes transaction_sample_data", function () {
+        expect(method).equal('transaction_sample_data');
+      });
+
+      it("generates the correct URL", function () {
+        expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION,
+                                                testLicense,
+                                                'transaction_sample_data',
+                                                SAMPLE_RUN_ID));
+      });
+
+      it("leaves the trace data alone", function () {
+        var traceData = params[1];
+        expect(traceData).deep.equal(traces);
+      });
     });
 
     // https://hudson.newrelic.com/job/collector-master/javadoc/com/nr/collector/methods/SqlTraceData.html
-    it("should send SQL trace data in the expected format", function (done) {
-      var sqls = [];
+    describe("sending SQL traces", function () {
+      var sqls;
 
-      var transaction = new Transaction(agent);
-      transaction.measureWeb('/bros/steak', 200, 487, 28);
+      beforeEach(function (done) {
+        sqls = [];
 
-      var trace = new SQLTrace('SELECT dude FROM bro WHERE meat = :ham',
-                               transaction,
-                               new Stats());
-      trace.generateJSON('DB/BroSQL/dudefella', {ham : 'steak'}, function (err, json) {
-        if (err) return done(err);
+        var transaction = new Transaction(agent);
+        transaction.url = '/bros/steak';
+        transaction.name = 'WebTransaction/Uri/bros/steak';
+        transaction.statusCode = 200;
+        transaction.end();
 
-        sqls.push(json);
+        var trace = new SQLTrace('SELECT dude FROM bro WHERE meat = :ham',
+                                 transaction,
+                                 new Stats());
 
-        connection.sendSQLTraces(sqls);
-        mockConnection.verify();
+        trace.generateJSON('DB/BroSQL/dudefella', {ham : 'steak'}, function (err, json) {
+          if (err) return done(err);
 
+          sqls.push(json);
+          connection.sendSQLTraces(sqls);
+
+          done();
+        });
+      });
+
+      it("blows up if invoked without slow SQL", function () {
+        expect(function () { connection.sendSQLTraces(null); }).throws();
+      });
+
+      it("invokes sql_trace_data", function () {
         expect(method).equal('sql_trace_data');
-        expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
-                                                'sql_trace_data', SAMPLE_RUN_ID));
+      });
+
+      it("generates the correct URL", function () {
+        expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION,
+                                                testLicense,
+                                                'sql_trace_data',
+                                                SAMPLE_RUN_ID));
+      });
+
+      it("shouldn't mess up the traces", function () {
         var sqlTraces = params;
         expect(sqlTraces).deep.equal(sqls);
-
-        return done();
       });
     });
 
     // https://hudson.newrelic.com/job/collector-master/javadoc/com/nr/collector/methods/Shutdown.html
-    it("should send shutdown command in the expected format", function () {
-      connection.sendShutdown();
-      mockConnection.verify();
+    describe("shutting down", function () {
+      beforeEach(function () {
+        connection.sendShutdown();
+      });
 
-      expect(method).equal('shutdown');
-      expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
-                                              'shutdown', SAMPLE_RUN_ID));
-      should.not.exist(params);
+      it("invokes shutdown", function () {
+        expect(method).equal('shutdown');
+      });
+
+      it("generates the correct URL", function () {
+        expect(uri).equal(generateSubmissionURL(PROTOCOL_VERSION, testLicense,
+                                                'shutdown', SAMPLE_RUN_ID));
+      });
+
+      it("includes no parameters", function () {
+        should.not.exist(params);
+      });
     });
   });
 
   describe("when sent a ForceRestartException by the collector", function () {
-    it("should restart the agent", function (done) {
+    it("restarts the agent", function (done) {
       var invokeMethod = DataSender.prototype.invokeMethod;
 
       agent.once('restart', function () {
@@ -217,16 +319,17 @@ describe("CollectorConnection", function () {
         }
       };
 
-      var connection        = new CollectorConnection(agent);
-      connection.agentRunId = SAMPLE_RUN_ID;
-      agent.connection      = connection;
+      var connection      = new CollectorConnection(agent);
+      agent.connection    = connection;
+      agent.config.run_id = SAMPLE_RUN_ID;
+      agent.metrics.measureMilliseconds('Test/Unimportant', 23);
 
-      connection.sendMetricData(0, 1, [1]);
+      connection.sendMetricData(agent.metrics);
     });
   });
 
   describe("when sent a ForceDisconnectException by the collector", function () {
-    it("should shut the agent down", function (done) {
+    it("shuts the agent down", function (done) {
       var invokeMethod = DataSender.prototype.invokeMethod;
 
       agent.once('shutdown', function () {
@@ -252,10 +355,11 @@ describe("CollectorConnection", function () {
       };
 
       var connection        = new CollectorConnection(agent);
-      connection.agentRunId = SAMPLE_RUN_ID;
       agent.connection      = connection;
+      agent.config.run_id = SAMPLE_RUN_ID;
+      agent.metrics.measureMilliseconds('Test/Unimportant', 23);
 
-      connection.sendMetricData(0, 1, [1]);
+      connection.sendMetricData(agent.metrics);
     });
   });
 });

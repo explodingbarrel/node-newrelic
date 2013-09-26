@@ -1,3 +1,117 @@
+### v0.11.2 / beta-29 (2013-09-25);
+
+* Fixed a bug with the Connect instrumentation that would cause it to
+  crash when using Connect's static middleware in strict mode. Using
+  ES5 future reserved keywords for function names is a bad idea, and
+  this is why, but static's name is highly unlikely to change. For
+  those of you who are examining the state of your middleware stack after
+  configuring it, you probably shouldn't be doing that, but if you run into
+  problems with the New Relic agent installed, try changing your test to use
+  `name.indexOf('whatever') === 0` as the predicate instead of
+  `name === 'whatever'`.
+
+### v0.11.1 / beta-28 (2013-09-24);
+
+* Prevent requests from being double-counted by changing the tracer to
+  always reuse existing transactions rather than trying to nest them.
+* Changed the Connect instrumentation to preserve the names of middleware
+  functions after wrapping them. If you need this change, you should
+  probably change your code so you don't need it anymore.
+* Added a bunch of server-side configuration options that are known but
+  unsupported to the agent.
+
+### v0.11.0 / beta-27 (2013-09-20):
+
+* IMPORTANT. There have been MAJOR CHANGES in how requests are named for
+  display and aggregation in the New Relic user interface. Read the section in
+  the README on transactions and request naming for details. For good measure,
+  read it twice. If your requests are all still ending up named `/*`, read
+  it a third time. This is **especially** true if you're not using Express
+  or Restify, in which case you will almost certainly want to make changes
+  in how you configure New Relic.
+* IMPORTANT. New Relic for Node.js now supports the full range of server-side
+  configuration options offered by the New Relic web interface. By default,
+  server-side settings will override the settings in your configuration file
+  (or environment variables). You can disable server-side configuration by
+  setting `ignore_server_configuration` to `true` in your configuration file
+  (or setting `NEW_RELIC_IGNORE_SERVER_CONFIGURATION` to 'true').
+* BREAKING CHANGE: The New Relic module now exports an API to be used for
+  naming transactions and for adding URL to transaction name mapping rules. If
+  you were using `require('newrelic')` as an interface to the agent's
+  configuration or its internals, you'll need to fix your code (also you
+  probably shouldn't have been doing that).
+* BREAKING CHANGE: The configuration parameter
+  `transaction_tracer.trace_threshold` has been renamed
+  `transaction_tracer.transaction_threshold` to make it consistent with New
+  Relic's other agents.
+* Applications using the Express or Restify routers will now have their
+  requests named after the matching routes. These names can be overridden
+  but the transaction-naming API.
+* There are new configuration parameters for adding rules for naming or
+  ignoring requests. The README has a good example for how to keep socket.io
+  from blowing out your average response time. You should read it!
+* Tweaked the calculation of exclusive time in transaction traces, which
+  should make more of the transaction trace detail pages make sense.
+
+### v0.10.3 / beta-26 (2013-08-25):
+
+* Fixed a regression in `beta-25` that caused the agent to incorrectly
+  calculate an important timestamp, thus leading to data not showing up
+  in New Relic.
+* Improved in-memory aggregation (when the connection between the agent
+  and New Relic is unavailable or failing).
+
+### v0.10.2 / beta-25 (2013-08-23):
+
+* Fixed a serious error in how the agent handles communication errors
+  when sending errors to New Relic. If you're running v0.10.0 or v0.10.1,
+  upgrade sooner rather than later, as those versions are losing data.
+* Substantially improved the quality of reporting on errors noticed by the
+  Node agent. Stack traces, scopes, and messages should be much better.
+
+### v0.10.1 / beta-24 (2013-08-19):
+
+* The instrumentation for `http` no longer assumes that the hostname for
+  external requests will be named `host` (`hostname` is also allowed, and
+  `http.request()` defaults to `localhost`).
+* The Node agent and New Relic's servers disagreed about what many metrics
+  should be called. The agent was wrong and it regrets the error.
+* Minor tweaks to database instrumentation (MongoDB and MySQL) that could have
+  a small but visible impact on the overview display.
+
+### v0.10.0 / beta-23 (2013-08-17):
+
+* IMPORTANT. The transaction tracer in this build is COMPLETELY NEW. This means
+  that the agent will probably work just fine under Node 0.8 and newer, but
+  Node versions 0.6 and older are presently unsupported, and support for them
+  may or may not come back. However, the quality of the metrics gathered by the
+  agent is now vastly improved.
+* There are over 100 commits included in this build. Every effort has been made
+  to ensure that we will not crash your applications, but be aware there may be
+  regressions.
+* Substantially more information is displayed by New Relic for slow transaction
+  traces. How this information is displayed is a work in progress, as New Relic
+  works to create a consistent user experience for developers writing both
+  synchronous and asynchronous applications.
+* Most Redis and memcached operations will now provide details on which keys
+  were involved in an operation.
+* The error tracer has been given a new coat of paint as well, and takes better
+  advantage of Node domains, when they're available. Fewer errors should be
+  double-counted, as well.
+* MongoDB instrumentation is substantially improved.
+* Express instrumentation now deals with the removal of the (very helpful)
+  version field from recent versions of Express.
+* Exclusive durations are reported for metrics, improving transaction
+  breakdowns.
+* Several bugs in the communication between the New Relic agent and New Relic's
+  servers have been fixed.
+* Failed connection attempts between the agent and New Relic's servers no longer
+  cause aggregated metrics to be lost, nor will this trigger an agent crash.
+
+### v0.9.22 / beta-22 (2013-06-11):
+
+* Capture request URL before Express can mess with it.
+
 ### v0.9.21 / beta-21 (2013-06-04):
 
 * Don't try to connect without a license key.

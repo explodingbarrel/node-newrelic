@@ -6,7 +6,8 @@ var path        = require('path')
   , helper      = require(path.join(__dirname, 'lib', 'agent_helper'))
   , codec       = require(path.join(__dirname, '..', 'lib', 'util', 'codec'))
   , Stats       = require(path.join(__dirname, '..', 'lib', 'stats'))
-  , SQLTrace    = require(path.join(__dirname, '..', 'lib', 'transaction', 'trace', 'sql'))
+  , SQLTrace    = require(path.join(__dirname, '..', 'lib', 'transaction',
+                                   'trace', 'sql'))
   , Transaction = require(path.join(__dirname, '..', 'lib', 'transaction'))
   ;
 
@@ -15,14 +16,16 @@ describe('SQLTrace', function () {
     , query
     , stats
     , transaction
+    , trace
     ;
 
   before(function () {
-    agent       = helper.loadMockedAgent();
-    query       = "SELECT age, risk_index FROM expectancies WHERE beneficiary_id = ?";
-    stats       = new Stats();
+    agent = helper.loadMockedAgent();
+    query = "SELECT age, risk_index FROM expectancies WHERE beneficiary_id = ?";
+    stats = new Stats();
     transaction = new Transaction(agent);
-    transaction.measureWeb("/getBeneficiary", 200, 812, 700);
+    transaction.url = '/getBeneficiary';
+    transaction.statusCode = 200;
   });
 
   after(function () {
@@ -30,7 +33,7 @@ describe('SQLTrace', function () {
   });
 
   it("should throw without a Transaction", function () {
-    expect(function () { var trace = new SQLTrace(query, null, stats); }).throws();
+    expect(function () { trace = new SQLTrace(query, null, stats); }).throws();
   });
 
   it("should be assocaited with a Transaction", function () {
@@ -38,15 +41,15 @@ describe('SQLTrace', function () {
   });
 
   it("should throw without statistics", function () {
-    expect(function () { var trace = new SQLTrace(query, transaction, null); }).throws();
+    expect(function () { trace = new SQLTrace(query, transaction, null); }).throws();
   });
 
   it("should be associated with statistics", function () {
-    expect((new SQLTrace(query, transaction, stats)).stats).deep.equal(stats);
+    expect(new SQLTrace(query, transaction, stats).stats).deep.equal(stats);
   });
 
   it("should throw without a query", function () {
-    expect(function () { var trace = new SQLTrace(null, transaction, stats); }).throws();
+    expect(function () { trace = new SQLTrace(null, transaction, stats); }).throws();
   });
 
   it("should be associated with a query", function () {
@@ -61,7 +64,6 @@ describe('SQLTrace', function () {
     var params;
 
     before(function () {
-      var trace = new SQLTrace(query, transaction, stats);
       params = {"beneficiary_id" : 101};
     });
 

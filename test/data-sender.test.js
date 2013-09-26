@@ -23,14 +23,15 @@ describe("DataSender", function () {
       proxy_host : 'localhost',
       proxy_port : '8765',
       host       : 'collector.newrelic.com',
-      port       : '80'
+      port       : '80',
+      run_id     : 12
     };
-    var sender = new DataSender(config, 12);
+    var sender = new DataSender(config);
 
     var expected = 'http://collector.newrelic.com:80' +
                    '/agent_listener/invoke_raw_method' +
-                   '?marshal_format=json&protocol_version=9&' +
-                   'license_key=&method=test&agent_run_id=12';
+                   '?marshal_format=json&protocol_version=11&' +
+                   'license_key=&method=test&run_id=12';
     expect(sender.getURL('test')).equal(expected);
   });
 
@@ -46,9 +47,10 @@ describe("DataSender", function () {
     beforeEach(function () {
       var config = {
         host       : 'collector.newrelic.com',
-        port       : '80'
+        port       : '80',
+        run_id     : 12
       };
-      var sender = new DataSender(config, 12);
+      var sender = new DataSender(config);
 
       headers = sender.getHeaders(4);
     });
@@ -84,9 +86,10 @@ describe("DataSender", function () {
     beforeEach(function () {
       var config = {
         host       : 'collector.newrelic.com',
-        port       : '80'
+        port       : '80',
+        run_id     : 12
       };
-      var sender = new DataSender(config, 12);
+      var sender = new DataSender(config);
 
       headers = sender.getHeaders(10, true);
     });
@@ -125,15 +128,14 @@ describe("DataSender", function () {
       var config = {
         host        : 'collector.newrelic.com',
         port        : '80',
-        license_key : 'hamburtson'
+        license_key : 'hamburtson',
+        run_id      : TEST_RUN_ID
       };
-      sender = new DataSender(config, TEST_RUN_ID);
+      sender = new DataSender(config);
     });
 
     it("should always add the agent run ID, if set", function () {
-      expect(sender.agentRunId).equal(TEST_RUN_ID);
-
-      var runPattern = new RegExp('agent_run_id=' + TEST_RUN_ID);
+      var runPattern = new RegExp('run_id=' + TEST_RUN_ID);
       expect(sender.getURL('TEST_METHOD')).match(runPattern);
     });
 

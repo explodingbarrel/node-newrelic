@@ -14,7 +14,10 @@ function FakeConnection () {
 
 FakeConnection.prototype.on = function (event, callback) {
   if (event === 'connect') return callback();
-  if (event === 'data') return this.on_data = callback;
+  if (event === 'data') {
+    this.on_data = callback;
+    return callback;
+  }
 };
 
 FakeConnection.prototype.setNoDelay = function (bagel) {
@@ -37,6 +40,10 @@ describe("agent instrumentation of Redis", function () {
       agent = helper.loadMockedAgent();
       initialize = require(path.join(__dirname, '..', 'lib',
                                      'instrumentation', 'redis'));
+    });
+
+    after(function () {
+      helper.unloadAgent(agent);
     });
 
     it("when passed no module", function () {
@@ -69,14 +76,14 @@ describe("agent instrumentation of Redis", function () {
 
       connection = new FakeConnection();
       mockConnection = sinon.mock(connection);
-      mockConnection.expects('write').withExactArgs('*1\r\n$4\r\ninfo\r\n').once();
 
-      client = new redis.RedisClient(connection);
-      client.port = 8765;
+      client = new redis.RedisClient(connection, {no_ready_check : true});
       client.host = 'fakehost.example.local';
+      client.port = 8765;
     });
 
     afterEach(function () {
+      mockConnection.verify();
       helper.unloadAgent(agent);
     });
 
@@ -84,7 +91,7 @@ describe("agent instrumentation of Redis", function () {
       mockConnection.expects('write').withExactArgs('*1\r\n$4\r\nping\r\n').once();
 
       agent.once('transactionFinished', function (transaction) {
-        var stats = transaction.metrics.getMetric('Redis/ping').stats;
+        var stats = transaction.metrics.getMetric('Redis/ping');
         expect(stats.callCount).equal(1);
 
         return done();
@@ -102,7 +109,6 @@ describe("agent instrumentation of Redis", function () {
         });
 
         should.exist(connection.on_data);
-        connection.on_data(new Buffer('$21\r\nredis_version:2.6.0\r\n'));
         connection.on_data(new Buffer('+PONG\r\n'));
 
         transaction.end();
@@ -113,7 +119,7 @@ describe("agent instrumentation of Redis", function () {
       mockConnection.expects('write').withExactArgs('*1\r\n$4\r\nping\r\n').once();
 
       agent.once('transactionFinished', function (transaction) {
-        var stats = transaction.metrics.getMetric('Redis/ping').stats;
+        var stats = transaction.metrics.getMetric('Redis/ping');
         expect(stats.callCount).equal(1);
 
         return done();
@@ -126,7 +132,6 @@ describe("agent instrumentation of Redis", function () {
         client.PING();
 
         should.exist(connection.on_data);
-        connection.on_data(new Buffer('$21\r\nredis_version:2.6.0\r\n'));
         connection.on_data(new Buffer('+PONG\r\n'));
 
         transaction.end();
@@ -140,7 +145,7 @@ describe("agent instrumentation of Redis", function () {
         .once();
 
       agent.once('transactionFinished', function (transaction) {
-        var stats = transaction.metrics.getMetric('Redis/ping').stats;
+        var stats = transaction.metrics.getMetric('Redis/ping');
         expect(stats.callCount).equal(1);
 
         return done();
@@ -158,7 +163,6 @@ describe("agent instrumentation of Redis", function () {
         });
 
         should.exist(connection.on_data);
-        connection.on_data(new Buffer('$21\r\nredis_version:2.6.0\r\n'));
         connection.on_data(new Buffer('+PONG\r\n'));
 
         transaction.end();
@@ -172,7 +176,7 @@ describe("agent instrumentation of Redis", function () {
         .once();
 
       agent.once('transactionFinished', function (transaction) {
-        var stats = transaction.metrics.getMetric('Redis/ping').stats;
+        var stats = transaction.metrics.getMetric('Redis/ping');
         expect(stats.callCount).equal(1);
 
         return done();
@@ -185,7 +189,6 @@ describe("agent instrumentation of Redis", function () {
         client.PING(1, 2);
 
         should.exist(connection.on_data);
-        connection.on_data(new Buffer('$21\r\nredis_version:2.6.0\r\n'));
         connection.on_data(new Buffer('+PONG\r\n'));
 
         transaction.end();

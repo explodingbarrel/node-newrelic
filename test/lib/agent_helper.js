@@ -20,6 +20,8 @@ var KEYPATH  = path.join(__dirname, 'test-key.key')
   , CAPATH   = path.join(__dirname, 'ca-certificate.crt')
   ;
 
+var _agent;
+
 var helper = module.exports = {
   /**
    * Set up an agent that won't try to connect to the collector, but also
@@ -33,6 +35,7 @@ var helper = module.exports = {
    */
   loadMockedAgent : function loadMockedAgent(options) {
     if (!options) options = {};
+    if (_agent) throw _agent.__created;
 
     var connection = new CollectorConnection({
       config : {
@@ -43,9 +46,11 @@ var helper = module.exports = {
     sinon.stub(connection, 'connect');
     options.connection = connection;
 
-    var agent = new Agent(options);
-    agent.setupConnection();
-    return agent;
+    _agent = new Agent(options);
+    _agent.__created = new Error("Only one agent at a time! This one was created at:");
+    _agent.setupConnection();
+
+    return _agent;
   },
 
   /**
@@ -55,6 +60,8 @@ var helper = module.exports = {
    * @returns Agent Agent with a mocked connection method.
    */
   instrumentMockedAgent : function instrumentMockedAgent() {
+    shimmer.debug = true;
+
     var agent = helper.loadMockedAgent();
     shimmer.patchModule(agent);
     shimmer.bootstrapInstrumentation(agent);
@@ -72,6 +79,9 @@ var helper = module.exports = {
     agent.stop();
     shimmer.unpatchModule();
     shimmer.unwrapAll();
+    shimmer.debug = false;
+
+    if (agent === _agent) _agent = null;
   },
 
   /**
@@ -83,6 +93,10 @@ var helper = module.exports = {
    * @param Function callback The function to be run within the transaction.
    */
   runInTransaction : function runInTransaction(agent, callback) {
+    if (!(agent && callback)) {
+      throw new TypeError("Must include both agent and function!");
+    }
+
     return agent.tracer.transactionProxy(function () {
       var transaction = agent.getTransaction();
       callback(transaction);
@@ -143,7 +157,7 @@ var helper = module.exports = {
       wrench.rmdirSyncRecursive(path.join(__dirname, '..',
                                           'integration', 'test-mongodb'));
 
-      return callback();
+      if (callback) return callback();
     });
   },
 
@@ -172,6 +186,30 @@ var helper = module.exports = {
 
       if (callback) return callback();
     });
+  },
+
+  /**
+   * Use c9/architect to bootstrap a Redis server for running integration
+   * tests.
+   *
+   * @param Function callback The operations to be performed while the server
+   *                          is running.
+   */
+  bootstrapRedis : function bootstrapRedis(callback) {
+    var redis = path.join(__dirname, 'architecture', 'redis.js');
+    var config = architect.loadConfig(redis);
+    architect.createApp(config, function (error, app) {
+      if (error) return helper.cleanRedis(app, function () {
+        return callback(error);
+      });
+
+      return callback(null, app);
+    });
+  },
+
+  cleanRedis : function cleanRedis(app, callback) {
+    var redis = app.getService('redisProcess');
+    redis.shutdown(callback);
   },
 
   withSSL : function (callback) {

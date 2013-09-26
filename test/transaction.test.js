@@ -31,10 +31,6 @@ describe("Transaction", function () {
     }).throws(/must be bound to the agent/);
   });
 
-  it("should be created without an associated trace", function () {
-    expect(trans.trace).equal(undefined);
-  });
-
   it("should create a trace on demand", function () {
     var trace = trans.getTrace();
     expect(trace).instanceOf(Trace);
@@ -66,6 +62,52 @@ describe("Transaction", function () {
     trans.end();
   });
 
+  describe("upon creation", function () {
+    it("should have an ID", function () {
+      expect(trans.id).above(0);
+    });
+
+    it("should have associated metrics", function () {
+      should.exist(trans.metrics);
+    });
+
+    it("should be timing its duration", function () {
+      return expect(trans.timer.isActive()).true;
+    });
+
+    it("should be created without an associated trace", function () {
+      expect(trans.trace).equal(null);
+    });
+
+    it("should have no associated URL (for hidden class)", function () {
+      expect(trans.url).equal(null);
+    });
+
+    it("should have no name set (for hidden class)", function () {
+      expect(trans.name).equal(null);
+    });
+
+    it("should have no PARTIAL name set (for hidden class)", function () {
+      expect(trans.partialName).equal(null);
+    });
+
+    it("should have no HTTP status code set (for hidden class)", function () {
+      expect(trans.statusCode).equal(null);
+    });
+
+    it("should have no error attached (for hidden class)", function () {
+      expect(trans.error).equal(null);
+    });
+
+    it("should have no HTTP method / verb set (for hidden class)", function () {
+      expect(trans.verb).equal(null);
+    });
+
+    it("should not be ignored by default (for hidden class)", function () {
+      return expect(trans.ignore).false;
+    });
+  });
+
   describe("with associated metrics", function () {
     it("should manage its own independent of the agent", function () {
       expect(trans.metrics).instanceOf(Metrics);
@@ -76,8 +118,8 @@ describe("Transaction", function () {
       expect(agent.metrics.apdexT).equal(trans.metrics.apdexT);
     });
 
-    it("should have the same metric renaming rules as the agent's", function () {
-      expect(agent.metrics.renamer).equal(trans.metrics.renamer);
+    it("should have the same metrics mapper as the agent's", function () {
+      expect(agent.mapper).equal(trans.metrics.mapper);
     });
   });
 
@@ -92,20 +134,12 @@ describe("Transaction", function () {
     expect(trans.isWeb()).equal(true);
   });
 
-  it("shouldn't crash when measuring URL paths without a leading slash", function () {
-    var trans = new Transaction(agent);
-    expect(function () {
-      trans.measureWeb('?t_u=http://some.com/o/p', 200, 1);
-      expect(trans.url).equal('/');
-    }).not.throws();
-  });
-
   describe("when dealing with individual metrics", function () {
     it("should add metrics by name", function () {
-      var tt = agent.createTransaction();
+      var tt = new Transaction(agent);
 
       tt.measure('Custom/Test01');
-      should.exist(tt.getMetrics('Custom/Test01'));
+      should.exist(tt.metrics.getMetric('Custom/Test01'));
 
       tt.end();
     });
@@ -114,140 +148,161 @@ describe("Transaction", function () {
        function () {
       var TRACE_NAME = 'Custom/Test06'
         , SLEEP_DURATION = 43
-        , tt = agent.createTransaction()
+        , tt = new Transaction(agent)
         ;
 
       tt.measure(TRACE_NAME, null, SLEEP_DURATION);
       tt.measure(TRACE_NAME, null, SLEEP_DURATION - 5);
 
-      var statistics = tt.getMetrics(TRACE_NAME).stats;
+      var statistics = tt.metrics.getMetric(TRACE_NAME);
       expect(statistics.callCount).to.equal(2);
       expect(statistics.max).above((SLEEP_DURATION - 1) / 1000);
     });
 
     it("should allow manual setting of metric durations", function () {
-      var tt = agent.createTransaction();
+      var tt = new Transaction(agent);
 
       tt.measure('Custom/Test16', null, 65);
       tt.end();
 
-      var metrics = tt.getMetrics('Custom/Test16');
-      metrics.stats.total.should.equal(0.065);
+      var metrics = tt.metrics.getMetric('Custom/Test16');
+      expect(metrics.total).equal(0.065);
     });
   });
 
-  describe("when recording web transactions", function () {
-    describe("with normal requests", function () {
-      it("should infer a satisfying end-user experience", function () {
-        trans.metrics.apdexT = 0.06;
-        trans.measureWeb('/test', 200, 55, 55);
+  describe("when being named", function () {
+    var trans;
 
-        var result = [
-          [{name : 'WebTransaction'},          [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'HttpDispatcher'},          [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'WebTransaction/Uri/test'}, [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'Apdex/Uri/test'},          [1,     0,     0,  0.06,  0.06,        0]],
-          [{name : 'Apdex'},                   [1,     0,     0,  0.06,  0.06,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+    beforeEach(function () {
+      trans = new Transaction(agent);
+    });
+
+    it("should throw when called with no parameters", function () {
+      expect(function () { trans.setName(); }).throws();
+    });
+
+    it("should ignore a URL when told to by a rule", function () {
+      agent.urlNormalizer.addSimple('^/test/');
+      trans.setName('/test/string?do=thing&another=thing', 200);
+      return expect(trans.ignore).true;
+    });
+
+    it("should ignore a transaction when told to by a rule", function () {
+      agent.transactionNameNormalizer.addSimple('^WebTransaction/NormalizedUri');
+      trans.setName('/test/string?do=thing&another=thing', 200);
+      return expect(trans.ignore).true;
+    });
+
+    describe("with no partial name set", function () {
+      it("produces a normalized (backstopped) name when status is 200", function () {
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.name).equal('WebTransaction/NormalizedUri/*');
       });
 
-      it("should infer a tolerable end-user experience", function () {
-        trans.metrics.apdexT = 0.05;
-        trans.measureWeb('/test', 200, 55, 100);
-
-        var result = [
-          [{name : 'WebTransaction'},          [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'HttpDispatcher'},          [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'WebTransaction/Uri/test'}, [1, 0.055,   0.1, 0.055, 0.055, 0.003025]],
-          [{name : 'Apdex/Uri/test'},          [0,     1,     0,  0.05,  0.05,        0]],
-          [{name : 'Apdex'},                   [0,     1,     0,  0.05,  0.05,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+      it("produces a normalized partial name when status is 200", function () {
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.partialName).equal('NormalizedUri/*');
       });
 
-      it("should infer a frustrating end-user experience", function () {
-        trans.metrics.apdexT = 0.01;
-        trans.measureWeb('/test', 200, 55, 55);
-
-        var result = [
-          [{name : 'WebTransaction'},          [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'HttpDispatcher'},          [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'WebTransaction/Uri/test'}, [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'Apdex/Uri/test'},          [0,     0,     1,  0.01,  0.01,        0]],
-          [{name : 'Apdex'},                   [0,     0,     1,  0.01,  0.01,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+      it("passes through status code when status is 200", function () {
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.statusCode).equal(200);
       });
 
-      it("should chop query strings delimited by ? from request URLs", function () {
-        trans.measureWeb('/test?test1=value1&test2&test3=50');
-
-        expect(trans.url).equal('/test');
+      it("produces an error name when status is 404", function () {
+        trans.setName('/test/string?do=thing&another=thing', 404);
+        expect(trans.name).equal('WebTransaction/Uri/404/*');
       });
 
-      it("should chop query strings delimited by ; from request URLs", function () {
-        trans.measureWeb('/test;jsessionid=c83048283dd1328ac21aed8a8277d');
+      it("produces an error partial name when status is 404", function () {
+        trans.setName('/test/string?do=thing&another=thing', 404);
+        expect(trans.partialName).equal('Uri/404/*');
+      });
 
-        expect(trans.url).equal('/test');
+      it("passes through status code when status is 404", function () {
+        trans.setName('/test/string?do=thing&another=thing', 404);
+        expect(trans.statusCode).equal(404);
+      });
+
+      it("produces an error name when status is 501", function () {
+        trans.setName('/test/string?do=thing&another=thing', 501);
+        expect(trans.name).equal('WebTransaction/Uri/501/*');
+      });
+
+      it("produces an error partial name when status is 501", function () {
+        trans.setName('/test/string?do=thing&another=thing', 501);
+        expect(trans.partialName).equal('Uri/501/*');
+      });
+
+      it("passes through status code when status is 501", function () {
+        trans.setName('/test/string?do=thing&another=thing', 501);
+        expect(trans.statusCode).equal(501);
       });
     });
 
-    describe("with exceptional requests", function () {
-      it("should handle missing resources", function () {
-        trans.metrics.apdexT = 0.01;
-        trans.measureWeb('/test', 404, 55, 55);
-
-        var result = [
-          [{name : 'WebTransaction'},                [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'HttpDispatcher'},                [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'WebTransaction/StatusCode/404'}, [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'Apdex/StatusCode/404'},          [0,     0,     1,  0.01,  0.01,        0]],
-          [{name : 'Apdex'},                         [0,     0,     1,  0.01,  0.01,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+    describe("with a custom partial name set", function () {
+      beforeEach(function () {
+        trans.partialName = 'Custom/test';
       });
 
-      it("should handle bad requests", function () {
-        trans.metrics.apdexT = 0.01;
-        trans.measureWeb('/test', 400, 55, 55);
-
-        var result = [
-          [{name : 'WebTransaction'},                [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'HttpDispatcher'},                [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'WebTransaction/StatusCode/400'}, [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'Apdex/StatusCode/400'},          [0,     0,     1,  0.01,  0.01,        0]],
-          [{name : 'Apdex'},                         [0,     0,     1,  0.01,  0.01,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+      it("produces a custom name when status is 200", function () {
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.name).equal('WebTransaction/Custom/test');
       });
 
-      it("should handle over-long URIs", function () {
-        trans.metrics.apdexT = 0.01;
-        trans.measureWeb('/test', 414, 55, 55);
-
-        var result = [
-          [{name : 'WebTransaction'},                [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'HttpDispatcher'},                [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'WebTransaction/StatusCode/414'}, [1, 0.055, 0.055, 0.055, 0.055, 0.003025]],
-          [{name : 'Apdex/StatusCode/414'},          [0,     0,     1,  0.01,  0.01,        0]],
-          [{name : 'Apdex'},                         [0,     0,     1,  0.01,  0.01,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+      it("produces a partial name when status is 200", function () {
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.partialName).equal('Custom/test');
       });
 
-      it("should handle internal server errors", function () {
-        trans.metrics.apdexT = 0.01;
-        trans.measureWeb('/test', 500, 1, 1);
+      it("should rename a transaction when told to by a rule", function () {
+        agent.transactionNameNormalizer.addSimple(
+          '^(WebTransaction/Custom)/test$',
+          '$1/*'
+        );
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.name).equal('WebTransaction/Custom/*');
+      });
 
-        var result = [
-          [{name : 'WebTransaction'},          [1, 0.001, 0.001, 0.001, 0.001, 0.000001]],
-          [{name : 'HttpDispatcher'},          [1, 0.001, 0.001, 0.001, 0.001, 0.000001]],
-          [{name : 'WebTransaction/Uri/test'}, [1, 0.001, 0.001, 0.001, 0.001, 0.000001]],
-          [{name : 'Apdex/Uri/test'},          [0,     0,     1,  0.01,  0.01,        0]],
-          [{name : 'Apdex'},                   [0,     0,     1,  0.01,  0.01,        0]]
-        ];
-        expect(JSON.stringify(trans.metrics)).equal(JSON.stringify(result));
+      it("passes through status code when status is 200", function () {
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        expect(trans.statusCode).equal(200);
+      });
+
+      it("produces an error name when status is 404", function () {
+        trans.setName('/test/string?do=thing&another=thing', 404);
+        expect(trans.name).equal('WebTransaction/Uri/404/*');
+      });
+
+      it("produces an error partial name when status is 404", function () {
+        trans.setName('/test/string?do=thing&another=thing', 404);
+        expect(trans.partialName).equal('Uri/404/*');
+      });
+
+      it("passes through status code when status is 404", function () {
+        trans.setName('/test/string?do=thing&another=thing', 404);
+        expect(trans.statusCode).equal(404);
+      });
+
+      it("produces an error name when status is 501", function () {
+        trans.setName('/test/string?do=thing&another=thing', 501);
+        expect(trans.name).equal('WebTransaction/Uri/501/*');
+      });
+
+      it("produces an error partial name when status is 501", function () {
+        trans.setName('/test/string?do=thing&another=thing', 501);
+        expect(trans.partialName).equal('Uri/501/*');
+      });
+
+      it("passes through status code when status is 501", function () {
+        trans.setName('/test/string?do=thing&another=thing', 501);
+        expect(trans.statusCode).equal(501);
+      });
+
+      it("should ignore a transaction when told to by a rule", function () {
+        agent.transactionNameNormalizer.addSimple('^WebTransaction/Custom/test$');
+        trans.setName('/test/string?do=thing&another=thing', 200);
+        return expect(trans.ignore).true;
       });
     });
   });
@@ -257,5 +312,10 @@ describe("Transaction", function () {
     it("should produce a metrics summary suitable for the collector");
   });
 
-  it("should scope web transactions to their URL");
+  it("shouldn't scope web transactions to their URL", function () {
+    var trans = new Transaction(agent);
+    trans.setName('/test/1337?action=edit', 200);
+    expect(trans.name).not.equal('/test/1337?action=edit');
+    expect(trans.name).not.equal('WebTransaction/Uri/test/1337');
+  });
 });

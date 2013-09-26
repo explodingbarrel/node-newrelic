@@ -5,7 +5,8 @@ var path        = require('path')
   , expect      = chai.expect
   , helper      = require(path.join(__dirname, 'lib', 'agent_helper'))
   , codec       = require(path.join(__dirname, '..', 'lib', 'util', 'codec'))
-  , Segment     = require(path.join(__dirname, '..', 'lib', 'transaction', 'trace', 'segment'))
+  , Segment     = require(path.join(__dirname, '..', 'lib', 'transaction',
+                                    'trace', 'segment'))
   , Trace       = require(path.join(__dirname, '..', 'lib', 'transaction', 'trace'))
   , Transaction = require(path.join(__dirname, '..', 'lib', 'transaction'))
   ;
@@ -23,8 +24,9 @@ describe('Trace', function () {
 
   it("should always be bound to a transaction", function () {
     // fail
+    var transam;
     expect(function () {
-      var transam = new Trace();
+      transam = new Trace();
     }).throws(/must be associated with a transaction/);
 
     // succeed
@@ -42,19 +44,24 @@ describe('Trace', function () {
     expect(function () { trace.add('Custom/Test17/Child1'); }).not.throws();
   });
 
-  it("should produce a transaction trace in the collector's expected format", function (done) {
+  it("should produce a transaction trace in the collector's expected format",
+     function (done) {
     var DURATION = 33;
     var URL = '/test?test=value';
+    agent.config.capture_params = true;
 
     var transaction = new Transaction(agent);
-    transaction.measureWeb(URL, 200, DURATION);
+    transaction.url  = URL;
+    transaction.verb = 'GET';
 
     var trace = transaction.getTrace();
     var start = trace.root.timer.start;
     expect(start, "root segment's start time").above(0);
-    trace.root.timer.setDurationInMillis(DURATION, 0);
+    trace.setDurationInMillis(DURATION, 0);
 
-    var web = trace.addWeb(URL);
+    var web = trace.root.add(URL);
+    transaction.setName(URL, 200);
+    web.markAsWeb(URL);
     // top-level element will share a duration with the quasi-ROOT node
     web.setDurationInMillis(DURATION, 0);
 
@@ -73,13 +80,13 @@ describe('Trace', function () {
       0,
       DURATION,
       'ROOT',
-      {},
+      {nr_exclusive_duration_millis : 0},
       [
         [
           0,
           DURATION,
-          'WebTransaction/Uri/test',
-          {test : 'value'},
+          'WebTransaction/NormalizedUri/*',
+          {nr_exclusive_duration_millis : 8, test : 'value'},
           [
             // TODO: ensure that the ordering is correct WRT start time
             db.toJSON(),
@@ -102,9 +109,9 @@ describe('Trace', function () {
 
       // See docs on Transaction.generateJSON for what goes in which field.
       var expected = [
-        start,
+        0,
         DURATION,
-        'WebTransaction/Uri/test',  // scope
+        'WebTransaction/NormalizedUri/*',  // scope
         '/test',                    // URI path
         encoded, // compressed segment / segment data
         '',                         // FIXME: depends on RUM token in session
@@ -132,10 +139,13 @@ describe('Trace', function () {
   it("should produce human-readable JSON of the entire trace graph");
 
   describe("when inserting segments", function () {
-    var trace;
+    var trace
+      , transaction
+      ;
 
     beforeEach(function () {
-      trace = new Trace(new Transaction(agent));
+      transaction = new Transaction(agent);
+      trace       = transaction.getTrace();
     });
 
     it("should require a name for the new segment", function () {
@@ -152,16 +162,18 @@ describe('Trace', function () {
       expect(segment).instanceof(Segment);
     });
 
-    it("should call a callback associated with the segment at creation time", function (done) {
-      var segment;
-      segment = trace.add('Custom/Test18/Child1', function () {
+    it("should call a function associated with the segment",
+       function (done) {
+      var segment = trace.add('Custom/Test18/Child1', function () {
         return done();
       });
 
       segment.end();
+      transaction.end();
     });
 
-    it("should measure exclusive time vs total time at each level of the graph", function () {
+    it("should measure exclusive time vs total time at each level of the graph",
+       function () {
       var child = trace.add('Custom/Test18/Child1');
 
       trace.setDurationInMillis(42);
@@ -205,7 +217,9 @@ describe('Trace', function () {
       var child2 = trace.add('Custom/Test20/Child2');
       child2.setDurationInMillis(5, now + 5);
 
-      // add another that starts simultaneously with the first range but that extends beyond
+      /* add another that starts simultaneously with the first range but
+       * that extends beyond
+       */
       var child3 = trace.add('Custom/Test20/Child3');
       child3.setDurationInMillis(33, now);
 
