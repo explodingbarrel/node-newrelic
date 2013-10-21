@@ -17,19 +17,20 @@ var path                = require('path')
   ;
 
 describe("the New Relic agent", function () {
-  it("accepts a custom configuration as an option passed to the constructor",
+  it("requires the configuration be passed to the constructor",
      function () {
-    var config = configurator.initialize(logger, {config : {sample : true}});
-    var agent = new Agent({config : config});
+    var config = configurator.initialize(logger, {config : {agent_enabled : false}});
+    var agent = new Agent(config);
 
-    expect(agent.config.sample).equal(true);
+    expect(agent.config.agent_enabled).equal(false);
   });
 
   describe("when connecting to the collector", function () {
     var agent;
 
     beforeEach(function () {
-      agent = new Agent();
+      var config = configurator.initialize(logger, {config : {sample : true}});
+      agent = new Agent(config);
     });
 
     it("retries on failure", function (done) {
@@ -134,7 +135,7 @@ describe("the New Relic agent", function () {
         var config = configurator.initialize(logger, {
           config : {debug : {internal_metrics : true}}
         });
-        var debugged = new Agent({config : config});
+        var debugged = new Agent(config);
 
         var debug = debugged.config.debug;
         expect(debug.internal_metrics).equal(true);
@@ -147,7 +148,7 @@ describe("the New Relic agent", function () {
           var config = configurator.initialize(logger, {
             config : {debug : {internal_metrics : true}}
           });
-          debugged = new Agent({config : config});
+          debugged = new Agent(config);
         });
 
         it("should have an object for tracking internal metrics", function () {
@@ -181,7 +182,7 @@ describe("the New Relic agent", function () {
             {pattern : /^\/u/, name : 't'}
           ]}}
         });
-        configured = new Agent({config : config});
+        configured = new Agent(config);
       });
 
       it("loads the rules", function () {
@@ -201,7 +202,7 @@ describe("the New Relic agent", function () {
             /^\/ham_snadwich\/ignore/
           ]}}
         });
-        configured = new Agent({config : config});
+        configured = new Agent(config);
       });
 
       it("loads the rules", function () {
@@ -215,7 +216,7 @@ describe("the New Relic agent", function () {
     describe("when handling events", function () {
       it("should update the metrics' apdex tolerating value when configuration changes",
          function (done) {
-        expect(agent.metrics.apdexT).equal(0.5);
+        expect(agent.metrics.apdexT).equal(0.1);
         process.nextTick(function () {
           should.exist(agent.metrics.apdexT);
           expect(agent.metrics.apdexT).equal(0.666);
@@ -228,7 +229,7 @@ describe("the New Relic agent", function () {
 
       it("should reset the configuration and metrics normalizer on connection",
          function (done) {
-        expect(agent.config.apdex_t).equal(0.5);
+        expect(agent.config.apdex_t).equal(0.1);
         process.nextTick(function () {
           expect(agent.metrics.apdexT).equal(0.742);
           expect(agent.urlNormalizer.rules).deep.equal([]);
@@ -318,7 +319,8 @@ describe("the New Relic agent", function () {
 
       mock = sinon.mock(connection);
 
-      agent = new Agent({connection : connection});
+      var config = configurator.initialize(logger, {config : {sample : true}});
+      agent = new Agent(config, {connection : connection});
       agent.setupConnection();
     });
 
@@ -338,6 +340,22 @@ describe("the New Relic agent", function () {
     });
 
     describe("when harvesting", function () {
+      it("sends transactions to the new error handler after harvest", function (done) {
+        agent.metrics.started = 1337;
+
+        agent.harvest();
+
+        var transaction = new Transaction(agent);
+        agent.errors = {
+          onTransactionFinished : function (t) {
+            expect(t).equal(transaction);
+            return done();
+          }
+        };
+
+        agent.emit('transactionFinished', transaction);
+      });
+
       it("reports the error count", function () {
         agent.metrics.started = 1337;
 
@@ -348,7 +366,7 @@ describe("the New Relic agent", function () {
         agent.errors.add(transaction, new RangeError('stack depth exceeded'));
         transaction.end();
 
-        var metrics = new Metrics(0.5, agent.mapper, agent.metricNameNormalizer);
+        var metrics = new Metrics(0.1, agent.mapper, agent.metricNameNormalizer);
         metrics.started = 1337;
         metrics.getOrCreateMetric('Errors/all').incrementCallCount(3);
 

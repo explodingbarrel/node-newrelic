@@ -1,4 +1,123 @@
-### v0.11.2 / beta-29 (2013-09-25);
+### v0.12.1 / beta-38 (2013-10-17):
+
+* The transaction namer wasn't respecting error_collector.ignore_error_codes.
+  We've unified the code paths there so that this no longer happens, so that
+  if the status code of a request is in the list of codes to be ignored, it's
+  no longer rolled up under that status code and gets its normal name.
+
+### v0.12.0 / beta-37 (2013-10-16):
+
+* Changed how MongoDB, MySQL, memcached, and Redis metrics are reported to New
+  Relic. This is part of a larger effort to make the Monitoring > Database tab
+  of the New Relic UI more useful for Node developers. There will be a brief
+  period where your dashboards will have both the old and new metrics, which
+  could lead to some temporary duplication or metric names. These "duplicates"
+  will gradually stop showing up as the reporting windows containing the old
+  metric names expire. Be sure to let us know if you have strong feelings one
+  way or another about this change, as it's a work in progress.
+* Updated the module's dependencies to fix another subtle bug in how
+  error-handling works in Node 0.8.x. This should resolve the errors some users
+  were seeing.
+
+### v0.11.9 / beta-36 (2013-10-12):
+
+* Fixed a crash in the tracer that could turn a recoverable application error
+  into an unrecoverable process crash. Mea culpa, our apologies for the
+  inconvenience if you ran into this. In our defence, the errors we're running
+  into are getting ever more exotic as we get most of the common stuff nailed
+  down.
+* Added the ability to use the preconfigured Azure Web Server name as the
+  application name for a Node app. Thanks to New Relic .NET engineer Nick Floyd
+  for the suggestion.
+
+### v0.11.8 / beta-35 (2013-10-11):
+
+* Added a license entry to package.json.
+* Due to an npm bug, the module package got huge. This one is much smaller.
+
+### v0.11.7 / beta-34 (2013-10-11):
+
+* The last build of the agent had a flaw in how it dealt with outbound requests
+  that made it way too stringent about dealing with default ports. It is now
+  more sane about defaults.
+* The behavior of configuration precedence is slightly different now.
+  Previously, if there were list values set in the defaults, configuration
+  file, environment variables, or server-side configuration, they would be
+  concatenated instead of being overwritten.  This made it impossible to
+  override some of the defaults (most notably, it was impossible to not ignore
+  HTTP status code 404 in the error tracer), so now the configuration file will
+  overwrite the defaults, and environment variables will overwrite the
+  configuration file.  Values sent by New Relic will still be concatenated
+  instead of overwriting, though (again, this only affects configuration
+  variables with list values). Thanks to GitHub user grovr for identifying
+  the problem!
+* The error tracer will collect errors off transactions after the first harvest
+  cycle (thanks to GitHub user grovr for identifying this issue).
+* `cluster` users will no longer see occasional crashes due to New Relic's
+  instrumentation.
+* Fixed a few minor documentation errors that made it tough to use the
+  suggested ignoring rules for socket.io transactions.
+
+### v0.11.6 / beta-33 (2013-10-08):
+
+* Changed the module to not load the instrumentation *at all* if the agent is
+  disabled via configuration. This will keep the module from leaking any
+  resources when it's disabled.
+* The agent used to include query parameters in the name for outbound requests,
+  making for unwieldy-looking trace segments.  Those parameters are now
+  stripped off, and if `capture_params` (and `ignored_params`) are enabled,
+  parameters will be captured for (nicely-formatted) display.
+* Added a stubbed API so that when the agent is disabled, calls to the New
+  Relic API will not throw. Add naming calls to your code with impunity!
+* The module now looks in many more places for `newrelic.js` before complaining
+  that it can't be found. In order, it looks in the current working directory,
+  the directory of the Node process's main module (normally whatever file you
+  pass to node on the command line), the directory pointed to by the
+  environment variable `NEW_RELIC_HOME`, the current process's `$HOME`, and the
+  directory above the node_modules directory where `newrelic` is installed.
+
+### v0.11.5 / beta-32 (2013-10-03):
+
+* Fixed a major issue in the transaction tracer that affected users of certain
+  Express middleware plugins. HUGE thanks to Nicolas Laplante for his
+  assistance in isolating and reproducing the bug, and also to the denizens of
+  #libuv for eyeballing my various unsuccessful attempts at a fix.
+* Fixed another issue in the tracer where certain objects were being wrapped
+  too many times. Thanks to José F. Romaniello for confirming the fix.
+* Changed how requests handled by Express and Restify routes are named. This
+  change is being rolled out both in this module and on the New Relic website,
+  so there is a chance you will see the same route (or very similiar routes)
+  show up twice in aggregated metrics.
+* Dropped the default apdex tolerating value from 500 milliseconds to 100
+  milliseconds. This means that transactions slower than 400 milliseconds will
+  generate slow transaction traces. Read the documentation in README.md on
+  `apdex_t` and `apdex_f` for further details.
+
+### v0.11.4 / beta-31 (2013-10-01):
+
+* Fixed an error in the Connect and Express middleware instrumentation. Another
+  tip of the hat to Jeff Howell at Kabam for identifying this problem and
+  pointing to a solution!
+
+### v0.11.3 / beta-30 (2013-10-01):
+
+* Rewrote the MongoDB instrumentation. Big thanks to Jeff Howell at Kabam for
+  demonstrating a much more reliable and simple approach than what we had
+  before! Also expanded the number of MongoDB methods instrumented to include
+  more of the common operations and indexing operations.
+* Changed the default value of the `top_n` configuration parameter. Read the
+  documentation in `lib/config.default.js` for the details (we've taken another
+  run at making the docs for `top_n` easier to understand), but the upshot is
+  that by default you should see a greater diversity of slow transaction traces
+  now.
+* Closed a hole in the transaction tracer related to Connect and Express-style
+  middleware chains.
+* Fixed issues identified by testing against various versions of 0.11 and
+  master.
+* Added guidelines for contributing to the module. Read CONTRIBUTING.md
+  for details.
+
+### v0.11.2 / beta-29 (2013-09-25):
 
 * Fixed a bug with the Connect instrumentation that would cause it to
   crash when using Connect's static middleware in strict mode. Using
@@ -10,7 +129,7 @@
   `name.indexOf('whatever') === 0` as the predicate instead of
   `name === 'whatever'`.
 
-### v0.11.1 / beta-28 (2013-09-24);
+### v0.11.1 / beta-28 (2013-09-24):
 
 * Prevent requests from being double-counted by changing the tracer to
   always reuse existing transactions rather than trying to nest them.

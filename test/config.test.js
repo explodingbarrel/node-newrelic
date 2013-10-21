@@ -21,11 +21,8 @@ function idempotentEnv(name, value, callback) {
 
   process.env[name] = value;
   try {
-    var tc = Config.initialize(logger);
+    var tc = Config.initialize(logger, {config : {}});
     callback(tc);
-  }
-  catch (error) {
-    throw error;
   }
   finally {
     if (is) {
@@ -169,9 +166,9 @@ describe("the agent configuration", function () {
     });
 
     it("should pick up the transaction trace Top N scale", function () {
-      idempotentEnv('NEW_RELIC_TRACER_TOP_N', 20, function (tc) {
+      idempotentEnv('NEW_RELIC_TRACER_TOP_N', 5, function (tc) {
         should.exist(tc.transaction_tracer.top_n);
-        expect(tc.transaction_tracer.top_n).equal('20');
+        expect(tc.transaction_tracer.top_n).equal('5');
       });
     });
 
@@ -227,6 +224,13 @@ describe("the agent configuration", function () {
         expect(tc.enforce_backstop).equal(false);
       });
     });
+
+    it("should pick app name from APP_POOL_ID", function () {
+      idempotentEnv('APP_POOL_ID', 'Simple Azure app', function (tc) {
+        should.exist(tc.app_name);
+        expect(tc.applications()).eql(['Simple Azure app']);
+      });
+    });
   });
 
   describe("with default properties", function () {
@@ -279,8 +283,8 @@ describe("the agent configuration", function () {
       expect(configuration.agent_enabled).equal(true);
     });
 
-    it("should have an apdexT of 0.5", function () {
-      expect(configuration.apdex_t).equal(0.5);
+    it("should have an apdexT of 0.1", function () {
+      expect(configuration.apdex_t).equal(0.1);
     });
 
     it("should not capture request parameters", function () {
@@ -317,7 +321,7 @@ describe("the agent configuration", function () {
     });
 
     it("should collect one slow transaction trace per harvest cycle", function () {
-      expect(configuration.transaction_tracer.top_n).equal(1);
+      expect(configuration.transaction_tracer.top_n).equal(20);
     });
 
     it("should not debug internal metrics", function () {
@@ -338,6 +342,18 @@ describe("the agent configuration", function () {
 
     it("should enforce URL backstop", function () {
       expect(configuration.enforce_backstop).equal(true);
+    });
+
+    it("should allow passed-in config to override errors ignored", function () {
+      configuration = Config.initialize(logger, {
+        config : {
+          error_collector : {
+            ignore_status_codes : []
+          }
+        }
+      });
+
+      expect(configuration.error_collector.ignore_status_codes).eql([]);
     });
   });
 
@@ -463,7 +479,7 @@ describe("the agent configuration", function () {
     });
 
     it("should set apdex_t", function () {
-      expect(config.apdex_t).equal(0.5);
+      expect(config.apdex_t).equal(0.1);
       config.onConnect({'apdex_t' : 0.05});
       expect(config.apdex_t).equal(0.05);
     });
@@ -664,13 +680,13 @@ describe("the agent configuration", function () {
       });
 
       it("should update its apdex_t only when it has changed", function () {
-        expect(config.apdex_t).equal(0.5);
+        expect(config.apdex_t).equal(0.1);
 
         config.once('apdex_t', function () {
           throw new Error('should never get here');
         });
 
-        config.onConnect({'apdex_t' : 0.5});
+        config.onConnect({'apdex_t' : 0.1});
       });
     });
   });
@@ -736,9 +752,9 @@ describe("the agent configuration", function () {
     });
 
     it("shouldn't configure apdex_t", function () {
-      expect(config.apdex_t).equal(0.5);
+      expect(config.apdex_t).equal(0.1);
       config.onConnect({'apdex_t' : 0.05});
-      expect(config.apdex_t).equal(0.5);
+      expect(config.apdex_t).equal(0.1);
     });
 
     it("shouldn't configure data_report_period", function () {

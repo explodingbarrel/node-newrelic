@@ -1,7 +1,13 @@
 {
   "name": "newrelic",
-  "version": "0.11.2",
+  "version": "0.12.1",
   "author": "New Relic Node.js agent team <nodejs@newrelic.com>",
+  "licenses": [
+    {
+      "type": "proprietary",
+      "url": "https://raw.github.com/newrelic/node-newrelic/master/LICENSE"
+    }
+  ],
   "contributors": [
     {
       "name": "Saxon D'Aubin",
@@ -12,6 +18,11 @@
       "name": "Forrest L Norvell",
       "email": "forrest@newrelic.com",
       "web": "http://newrelic.com/"
+    },
+    {
+      "name": "Jacob Groundwater",
+      "email": "jacob@newrelic.com",
+      "web": "https://newrelic.com"
     }
   ],
   "description": "New Relic agent",
@@ -35,7 +46,7 @@
   },
   "dependencies": {
     "bunyan": "0.14.6",
-    "continuation-local-storage": "2.1.2"
+    "continuation-local-storage": "2.4.3"
   },
   "bundledDependencies": [
     "bunyan",
