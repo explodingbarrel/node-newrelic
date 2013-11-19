@@ -33,7 +33,7 @@ function generateSubmissionURL(protocolVersion, key, method, runId) {
 describe("CollectorConnection", function () {
   // CONSTANTS
   var SAMPLE_RUN_ID = 101010101
-    , PROTOCOL_VERSION = 11
+    , PROTOCOL_VERSION = 12
     ;
 
   var agent
@@ -145,7 +145,7 @@ describe("CollectorConnection", function () {
         transaction.statusCode = 400;
         transaction.end();
 
-        errors.onTransactionFinished(transaction);
+        errors.onTransactionFinished(transaction, agent.metrics);
         data = errors.errors;
         connection.sendTracedErrors(errors.errors);
       });

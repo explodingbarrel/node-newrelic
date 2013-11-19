@@ -302,6 +302,44 @@ describe("the New Relic agent", function () {
         expect(function () { agent.onNewMappings(rules); }).not.throws();
       });
     });
+
+    describe("when handling finished transactions", function () {
+      var transaction;
+
+      beforeEach(function () {
+        transaction = new Transaction(agent);
+        transaction.ignore = true;
+      });
+
+      it("shouldn't merge metrics when transaction is ignored", function () {
+        /* Top-level method is bound into EE, so mock the metrics collection
+         * instead.
+         */
+        var mock = sinon.mock(agent.metrics);
+        mock.expects('merge').never();
+
+        transaction.end();
+      });
+
+      it("shouldn't merge errors when transaction is ignored", function () {
+        /* Top-level method is bound into EE, so mock the error tracer instead.
+         */
+        var mock = sinon.mock(agent.errors);
+        mock.expects('onTransactionFinished').never();
+
+        transaction.end();
+      });
+
+      it("shouldn't aggregate trace when transaction is ignored", function () {
+        /* Top-level *and* second-level methods are bound into EEs, so mock the
+         * transaction trace getter instead.
+         */
+        var mock = sinon.mock(transaction);
+        mock.expects('getTrace').never();
+
+        transaction.end();
+      });
+    });
   });
 
   describe("with a mocked connection", function () {
@@ -360,6 +398,7 @@ describe("the New Relic agent", function () {
         agent.metrics.started = 1337;
 
         var transaction = new Transaction(agent);
+        transaction.name = 'WebTransaction/NormalizedUri/test';
         transaction.statusCode = 501;
         agent.errors.add(transaction, new TypeError('no method last on undefined'));
         agent.errors.add(transaction, new Error('application code error'));
@@ -369,6 +408,9 @@ describe("the New Relic agent", function () {
         var metrics = new Metrics(0.1, agent.mapper, agent.metricNameNormalizer);
         metrics.started = 1337;
         metrics.getOrCreateMetric('Errors/all').incrementCallCount(3);
+        metrics
+          .getOrCreateMetric('Errors/WebTransaction/NormalizedUri/test')
+          .incrementCallCount(1);
 
         mock.expects('sendMetricData').once().withArgs(metrics);
         mock.expects('sendTracedErrors').once();

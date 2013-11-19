@@ -1,3 +1,64 @@
+### v1.1.1 (2013-11-08):
+
+* Added the infrastructure necessary to support key transactions and New
+  Relic's new alerting policies.
+* The agent no longer renames transactions for requests that end in error to
+  the gnomic and unhelpful '400/\*' (or whatever the final HTTP status code
+  ends up being). This should make the traced errors tab considerably more
+  useful.
+* Improved instrumentation for legacy `http.createClient` and `http.Client`
+  client methods. A few modules still use these legacy API calls, and the old
+  instrumentation was just plain wrong.
+* Changed how the error tracer deals with certain kinds of errors to deal with
+  differences between Node versions 0.8 and 0.10. It should now convert throws
+  into fatal errors less frequently.
+* Removed useless fs.readDir instrumentation, which generated a lot of metrics
+  but which New Relic was unable to display in any useful form. Maybe it will
+  come back someday in a more useful incarnation.
+
+### v1.1.0 (2013-11-05):
+
+* Added a new call to the API, `.noticeError`. See the docs for details, but
+  unlike the other calls on the API, you can use this to pass off errors
+  anywhere in your app, not just from within web requests.
+* Ignoring slow (or polling) requests was only being applied to slow
+  transaction traces. It now applies to metrics and transactions that end in
+  errors.
+* MongoDB, Redis and Memcached now honor the `capture_params` and
+  `ignore_params` settings.
+* New Relic for Node.js, like New Relic's other agents, has a sophisticated
+  system for repeatedly trying to connect to New Relic's servers when the first
+  attempt results in failure. This had been broken since (roughly) January. It
+  works again now.
+* The built-in debugging for the transaction tracer was out of date with
+  respect to the production tracer. This is fixed, and you're welcome to
+  satisfy your curiosity by enabling it, but it's really not going to be useful
+  to you unless you feel like taking the time to understand what the tracer is
+  doing at a low level. Do not ever enable it in production, as it slaughters
+  the tracer's performance and generates a huge pile of objects per
+  transaction.
+
+### v1.0.1 (2013-10-30):
+
+* Added a new setIgnoreTransaction call to the exported API to allow explicit
+  control over whether transactions should be ignored or not. Mark those
+  polling routes to be ignored! Pull your crazy custom favicon.ico renderer out
+  of the ignore list!
+* The module will no longer pollute MongoDB queries with New Relic-only
+  parameters. Thanks to Alon Salant for identifying this issue, and all
+  apologies to him for the trouble it caused him.
+* The instrumentation for MongoDB, memcached, Redis, and Express will now
+  honor the setting of the `capture_params` configuration flag. Before the
+  module always captured query parameters.
+* Fixed a problem that would cause New Relic for Node to fail on versions of
+  Node between 0.8.0 and 0.8.3.
+* Upgraded to the newest version of `continuation-local-storage`, which has
+  many fixes for dealing with monkeypatched EventEmitters.
+
+### v1.0.0 (2013-10-24):
+
+* General release. No code changes from v0.12.1.
+
 ### v0.12.1 / beta-38 (2013-10-17):
 
 * The transaction namer wasn't respecting error_collector.ignore_error_codes.

@@ -41,6 +41,8 @@ describe("an instrumented Express application", function () {
 
     before(function () {
       agent = helper.instrumentMockedAgent();
+      agent.environment.clearDispatcher();
+      agent.environment.clearFramework();
 
       function Router() {}
       Router.prototype._match = function () { return {path : '/test/:id'}; };
@@ -184,6 +186,8 @@ describe("an instrumented Express application", function () {
 
     before(function () {
       agent = helper.instrumentMockedAgent();
+      agent.environment.clearDispatcher();
+      agent.environment.clearFramework();
 
       stub = {
         version : '3.1.4',

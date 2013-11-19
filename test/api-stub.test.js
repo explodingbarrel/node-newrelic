@@ -14,8 +14,8 @@ describe("the stubbed New Relic agent API", function () {
     api = new API();
   });
 
-  it("should only export 4 API calls", function () {
-    expect(Object.keys(api.constructor.prototype).length).equal(4);
+  it("should export 6 API calls", function () {
+    expect(Object.keys(api.constructor.prototype).length).equal(6);
   });
 
   it("exports a transaction naming function", function () {
@@ -40,6 +40,11 @@ describe("the stubbed New Relic agent API", function () {
     expect(function () { api.setControllerName('TEST/*', 'test'); }).not.throws();
   });
 
+  it("exports a transaction ignoring function", function () {
+    should.exist(api.setIgnoreTransaction);
+    expect(api.setIgnoreTransaction).a('function');
+  });
+
   it("exports a function for adding naming rules", function () {
     should.exist(api.addNamingRule);
     expect(api.addNamingRule).a('function');
@@ -56,5 +61,14 @@ describe("the stubbed New Relic agent API", function () {
 
   it("shouldn't throw when an ignoring rule is added", function () {
     expect(function () { api.addIgnoringRule(/^foo/, "/foo/*"); }).not.throws();
+  });
+
+  it("exports a function for capturing errors", function () {
+    should.exist(api.noticeError);
+    expect(api.noticeError).a('function');
+  });
+
+  it("shouldn't throw when an error is added", function () {
+    expect(function () { api.noticeError(new Error()); }).not.throws();
   });
 });

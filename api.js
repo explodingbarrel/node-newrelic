@@ -88,6 +88,37 @@ API.prototype.setControllerName = function (name, action) {
 };
 
 /**
+ * Tell the tracer whether to ignore the current transaction. The most common
+ * use for this will be to mark a transaction as ignored (maybe it's handling
+ * a websocket polling channel, or maybe it's an external call you don't care
+ * is slow), but it's also useful when you want a transaction that would
+ * otherwise be ignored due to URL or transaction name normalization rules
+ * to *not* be ignored.
+ *
+ * @param {boolean} ignored Ignore, or don't ignore, the current transaction.
+ */
+API.prototype.setIgnoreTransaction = function (ignored) {
+  var transaction = this.agent.tracer.getTransaction();
+  if (!transaction) {
+    return logger.warn("No transaction found to ignore.");
+  }
+
+  transaction.forceIgnore = ignored;
+};
+
+/**
+ * Send errors to New Relic that you've already handled yourself. Should
+ * be an Error or one of its subtypes, but the API will handle strings
+ * and objects that have an attached .message or .stack property.
+ *
+ * @param {Error} error The error to be traced.
+ */
+API.prototype.noticeError = function (error) {
+  var transaction = this.agent.tracer.getTransaction();
+  this.agent.errors.add(transaction, error);
+};
+
+/**
  * If the URL for a transaction matches the provided pattern, name the
  * transaction with the provided name. If there are capture groups in the
  * pattern (which is a standard JavaScript regular expression, and can be

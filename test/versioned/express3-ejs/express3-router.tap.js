@@ -21,6 +21,9 @@ test("Express 3 router introspection", function (t) {
     });
   });
 
+  // need to capture parameters
+  agent.config.capture_params = true;
+
   agent.on('transactionFinished', function (transaction) {
     t.equal(transaction.name, 'WebTransaction/Expressjs/GET//test/:id',
             "transaction has expected name");
@@ -50,7 +53,7 @@ test("Express 3 router introspection", function (t) {
                 function (error, res, body) {
 
       t.equal(res.statusCode, 200, "nothing exploded");
-      t.deepEqual(body, {status : 'ok'}, "got expected respose");
+      t.deepEqual(body, {status : 'ok'}, "got expected response");
     });
   });
 });

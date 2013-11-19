@@ -1,44 +1,24 @@
-# New Relic for Node.js
+[![npm status badge](https://nodei.co/npm/newrelic.png?stars=true&downloads=true)](https://nodei.co/npm/newrelic/)
 
-**NOTE:** If you've used previous versions of New Relic for Node.js, you should
-read the section on [transactions and request
-naming](#transactions-and-request-naming), and some important things have
-changed in the [configuration](#configuring-the-agent), so you'll want to read
-that section again as well.
+# New Relic for Node.js
 
 This package instruments your application for performance monitoring
 with [New Relic](http://newrelic.com).
 
-This is a **beta release**. It has known issues that may affect your
-application's stability. You should try it in your staging or development
+This is a new product. You should try it in your staging or development
 environment first to verify it works for you.
 
 Make sure you have a [New Relic account](http://newrelic.com) before
 starting. To see all the features, such as slow transaction traces, you will
-need a New Relic Pro subscription. Contact your New Relic representative to
-request a Pro Trial subscription during your beta testing.
+need a New Relic Pro subscription (or equivalent).
 
 ## Table of contents
 
-* [Support](#support)
 * [Getting started](#getting-started)
 * [Transactions and request naming](#transactions-and-request-naming)
 * [Configuration](#configuring-the-agent)
 * [Contributions](#contributions)
 * [Known issues](#known-issues)
-
-## Support
-
-New Relic for Node.js is currently in beta and has only limited support.
-Customers who tried it out during the open beta period are welcome to continue
-using it and will receive support, but any new deployments may not receive
-technical support, or receive only limited assistance. We're very close to a
-wider public release, but we're not quite there yet!
-
-We're just as eager as you are to see Node and New Relic live happily ever
-after and we're 100% committed to it. We expect to open up a new beta very
-soon. If you'd like to know when the agent is ready for release, please [sign
-up](http://try.newrelic.com/nodejs) to be notified.
 
 ## Getting started
 
@@ -58,16 +38,15 @@ If you wish to keep the configuration for the agent separate from your
 application, the agent will look for newrelic.js in the directory referenced
 by the environment variable `NEW_RELIC_HOME` if it's set.
 
-When you start your app, the agent should start up with it and start
-reporting data that will appear within [the New Relic
-UI](https://rpm.newrelic.com/) after a few minutes. Because the agent
-minimizes the amount of bandwidth it consumes, it only reports data once a
-minute, so if you add the agent to tests that take less than a minute to run,
-the agent won't have time to report data to New Relic. The agent will write
-its log to a file named `newrelic_agent.log` in the application directory. If
-the agent doesn't send data or crashes your app, the log can help New Relic
-determine what went wrong, so be sure to send it along with any bug reports
-or support requests.
+When you start your app, the agent should start up with it and start reporting
+data that will appear within [the New Relic UI](https://rpm.newrelic.com/)
+after a few minutes. Because the agent minimizes the amount of bandwidth it
+consumes, it only reports data once a minute, so if you add the agent to tests
+that take less than a minute to run, the agent won't have time to report data
+to New Relic. The agent will write its log to a file named `newrelic_agent.log`
+in the application directory. If the agent doesn't send data or crashes your
+app, the log can help New Relic determine what went wrong, so be sure to send
+it along with any bug reports or support requests.
 
 ## Transactions and request naming
 
@@ -139,7 +118,7 @@ use the API calls described below to come up with more descriptive names. Also,
 if you use a different web framework or router and would like to see support
 for it added, please let us know.
 
-### The request naming API
+### Request naming with the module API
 
 The API is what's handed back from `require('newrelic')`, so
 
@@ -252,6 +231,26 @@ Programmatic version of `rules.ignore` above. Ignoring rules can not be removed
 until the Node process is restarted. They can also be added via the agent's
 configuration. The pattern is mandatory.
 
+### Other API calls
+
+#### newrelic.setIgnoreTransaction(ignored)
+
+Tell the module explicitly whether or not a given request should be ignored.
+Allows you to explicitly filter out long-polling routes or requests you know
+are going to be time-consuming in an uninteresting way, and also allows you
+to gather metrics for requests that would otherwise be ignored. Note that
+to prevent a transaction from being ignored with this function, you **must**
+pass `false` as the parameter – in this case `null` or `undefined` will be
+ignored.
+
+#### newrelic.noticeError(error)
+
+If your app is doing its own error handling with domains or try/catch clauses,
+but you want all of the information about how many errors are coming out of the
+app to be centrally managed, use this call. Unlike most of the calls here, this
+call can be used outside of route handlers, but will have additional context if
+called from within transaction scope.
+
 ### The fine print
 
 This is the Node-specific version of New Relic's transaction naming API
@@ -357,17 +356,17 @@ For completeness, here's the rest of the list:
 * `NEW_RELIC_DEBUG_METRICS`: Whether to collect internal supportability
   metrics for the agent. Don't mess with this unless New Relic asks you to.
 * `NEW_RELIC_DEBUG_TRACER`: Whether to dump traces of the transaction tracer's
-  internal operation. You're welcome to enable it, but it's unlikely to be
-  edifying unless you're a New Relic Node.js engineer.
+  internal operation. It's unlikely to be informative unless you're a New Relic
+  Node.js engineer and it has a significant performance cost, so use with care.
 
 ## Contributions
 
-We owe a debt to all of the beta testers who have provided us with feedback,
-and in some cases significant pieces of code. (If you wish to contribute,
-please see CONTRIBUTING.md in this package.) In particular, we're indebted
-to these people:
+We owe a debt to all of the beta testers and users who have provided us with
+feedback, and in some cases significant pieces of code. (If you wish to
+contribute, please see CONTRIBUTING.md in this directory.) In particular, we're
+indebted to these people:
 
-* Hernan Silberman, for his work on the memcached instrumentation
+* Hernan Silberman, for his work on the memcached instrumentation.
 * Jeff Howell &lt;jhowell@kabam.com&gt;, for coming up with a much simpler way
   to instrument node-mongodb-native, as well as pointing out a problem with the
   Connect instrumentation.
@@ -401,22 +400,19 @@ Information about changes to the agent are in NEWS.md.
 
 ### New Relic features available for other platforms not yet in Node.js
 
+* SSL-protected connections between the module and New Relic
+* high-security mode
 * Real User Monitoring (RUM)
-* custom instrumentation APIs
+* cross-application tracing (depends on RUM)
+* custom parameters, metrics and instrumentation
 * slow SQL traces and explain plans
-* custom parameters
 * garbage collector instrumentation
-* capacity planning
 * thread profiling
+* X-ray transactions (depends on thread profiling)
+* capacity planning
 
 ## LICENSE
 
-The New Relic Node.js agent uses code from the following open source projects
-under the following licenses:
-
-    bunyan                      http://opensource.org/licenses/MIT
-    continuation-local-storage  http://opensource.org/licenses/BSD-3-Clause
-
-The New Relic Node.js agent itself is free-to-use, proprietary software.
-Please see the full license (found in LICENSE in this distribution) for
-details.
+The New Relic Node.js agent is free-to-use, proprietary software.  Please see
+the full license (found in LICENSE in this distribution) for details on its
+license and the licenses of its dependencies.

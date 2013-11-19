@@ -30,7 +30,7 @@ describe("DataSender", function () {
 
     var expected = 'http://collector.newrelic.com:80' +
                    '/agent_listener/invoke_raw_method' +
-                   '?marshal_format=json&protocol_version=11&' +
+                   '?marshal_format=json&protocol_version=12&' +
                    'license_key=&method=test&run_id=12';
     expect(sender.getURL('test')).equal(expected);
   });
@@ -141,6 +141,22 @@ describe("DataSender", function () {
 
     it("should correctly set up the method", function () {
       expect(sender.getURL('TEST_METHOD')).match(/method=TEST_METHOD/);
+    });
+  });
+
+  describe("when the connection errors", function () {
+    it("should emit an error", function (done) {
+      var sender = new DataSender({host : 'localhost', port : 8765});
+
+      sender.on('error', function (message, error) {
+        expect(message).equal('TEST');
+        expect(error.message).equal('connect ECONNREFUSED');
+
+        done();
+      });
+
+      var body = '{"message":"none"}';
+      sender.postToCollector('TEST', sender.getHeaders(body.length), body);
     });
   });
 

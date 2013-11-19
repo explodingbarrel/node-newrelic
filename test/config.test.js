@@ -434,6 +434,9 @@ describe("the agent configuration", function () {
       should.not.exist(configuration.newrelic_home);
       expect(configuration.error_collector &&
              configuration.error_collector.enabled).equal(true);
+
+      delete process.env.NEW_RELIC_NO_CONFIG_FILE;
+      delete process.env.NEW_RELIC_HOME;
     });
   });
 
@@ -541,6 +544,13 @@ describe("the agent configuration", function () {
 
       config.onConnect({'ignored_params' : ['a', 'b']});
       expect(config.ignored_params).eql(['b', 'c', 'a']);
+    });
+
+    it("should load named transaction apdexes", function () {
+      var apdexes = {"WebTransaction/Custom/UrlGenerator/en/betting/Football" : 7.0};
+      expect(config.web_transactions_apdex).eql({});
+      config.onConnect({'web_transactions_apdex' : apdexes});
+      expect(config.web_transactions_apdex).eql(apdexes);
     });
 
     it("shouldn't blow up when sampling_rate is received", function () {
@@ -755,6 +765,13 @@ describe("the agent configuration", function () {
       expect(config.apdex_t).equal(0.1);
       config.onConnect({'apdex_t' : 0.05});
       expect(config.apdex_t).equal(0.1);
+    });
+
+    it("shouldn't configure named transaction apdexes", function () {
+      var apdexes = {"WebTransaction/Custom/UrlGenerator/en/betting/Football" : 7.0};
+      expect(config.web_transactions_apdex).eql({});
+      config.onConnect({'web_transactions_apdex' : apdexes});
+      expect(config.web_transactions_apdex).eql({});
     });
 
     it("shouldn't configure data_report_period", function () {
